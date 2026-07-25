@@ -1,0 +1,77 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_zip:
+        description: Caminho do ZIP enviado pelo painel
+        required: true
+        type: string
+      build_type:
+        description: debug ou release
+        required: true
+        default: debug
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Preparar projeto
+        run: |
+          mkdir -p work
+          unzip -q "${{ inputs.project_zip }}" -d work
+          ROOT=$(find work -type f -name gradlew -printf '%h\n' | head -n 1)
+          if [ -z "$ROOT" ]; then
+            echo "ERRO: gradlew não encontrado no ZIP."
+            exit 1
+          fi
+          echo "PROJECT_ROOT=$ROOT" >> "$GITHUB_ENV"
+          chmod +x "$ROOT/gradlew"
+
+      - name: Compilar APK debug
+        if: ${{ inputs.build_type == 'debug' }}
+        run: |
+          cd "$PROJECT_ROOT"
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Compilar APK release
+        if: ${{ inputs.build_type == 'release' }}
+        run: |
+          cd "$PROJECT_ROOT"
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Reunir APKs
+        run: |
+          mkdir -p output
+          find "$PROJECT_ROOT" -type f -name "*.apk" -exec cp {} output/ \;
+          ls -lah output
+          test "$(find output -type f -name '*.apk' | wc -l)" -gt 0
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ github.run_number }}
+          path: output/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
