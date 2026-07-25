@@ -13,8 +13,9 @@ on:
         default: debug
         type: string
       commit_sha:
-        description: Commit exato que contém o ZIP
-        required: true
+        description: Commit que contém o ZIP (opcional para painéis antigos)
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -27,11 +28,44 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Baixar commit exato do projeto
+      - name: Baixar repositório
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.commit_sha }}
+          ref: ${{ inputs.commit_sha != '' && inputs.commit_sha || github.ref_name }}
           fetch-depth: 1
+
+      - name: Garantir ZIP enviado
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PROJECT_ZIP="${{ inputs.project_zip }}"
+          COMMIT_SHA="${{ inputs.commit_sha }}"
+
+          # Painel V4: o checkout já usa o commit exato.
+          if [ -n "$COMMIT_SHA" ] && [ -f "$PROJECT_ZIP" ]; then
+            echo "ZIP confirmado no commit exato: $COMMIT_SHA"
+            exit 0
+          fi
+
+          # Compatibilidade com painéis antigos:
+          # atualiza a branch algumas vezes até o novo upload aparecer.
+          for tentativa in $(seq 1 15); do
+            if [ -f "$PROJECT_ZIP" ]; then
+              echo "ZIP confirmado: $PROJECT_ZIP"
+              exit 0
+            fi
+
+            echo "Aguardando o ZIP aparecer na branch (tentativa $tentativa/15)..."
+            git fetch origin "${{ github.ref_name }}" --depth=1
+            git reset --hard "origin/${{ github.ref_name }}"
+            sleep 2
+          done
+
+          echo "ERRO: o arquivo informado não foi encontrado: $PROJECT_ZIP"
+          echo "Arquivos disponíveis em uploads:"
+          find uploads -maxdepth 2 -type f -print || true
+          exit 1
 
       - name: Configurar Java
         uses: actions/setup-java@v4
@@ -43,24 +77,18 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Preparar projeto
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p work
 
           PROJECT_ZIP="${{ inputs.project_zip }}"
-
-          if [ ! -f "$PROJECT_ZIP" ]; then
-            echo "ERRO: o arquivo confirmado pelo painel não está no commit ${{ inputs.commit_sha }}: $PROJECT_ZIP"
-            echo "Arquivos disponíveis em uploads:"
-            find uploads -maxdepth 2 -type f -print || true
-            exit 1
-          fi
-
           unzip -q "$PROJECT_ZIP" -d work
+
           ROOT=$(find work -type f -name gradlew -printf '%h\n' | head -n 1)
 
           if [ -z "$ROOT" ]; then
-            echo "ERRO: gradlew não encontrado no ZIP."
+            echo "ERRO: gradlew não encontrado dentro do ZIP."
             find work -maxdepth 4 -type f -print
             exit 1
           fi
@@ -82,6 +110,7 @@ jobs:
 
       - name: Reunir APKs
         run: |
+          set -euo pipefail
           mkdir -p output
           find "$PROJECT_ROOT" -type f -name "*.apk" -exec cp {} output/ \;
           ls -lah output
@@ -94,3 +123,4 @@ jobs:
           path: output/*.apk
           if-no-files-found: error
           retention-days: 30
+
