@@ -4,13 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       project_zip:
-        description: Caminho do ZIP enviado pelo painel
+        description: Caminho exato do ZIP enviado pelo painel
         required: true
         type: string
       build_type:
         description: debug ou release
         required: true
         default: debug
+        type: string
+      commit_sha:
+        description: Commit exato que contém o ZIP
+        required: true
         type: string
 
 permissions:
@@ -23,8 +27,11 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Baixar repositório
+      - name: Baixar commit exato do projeto
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 1
 
       - name: Configurar Java
         uses: actions/setup-java@v4
@@ -37,17 +44,19 @@ jobs:
 
       - name: Preparar projeto
         run: |
+          set -euo pipefail
           mkdir -p work
 
-          if [ ! -f "${{ inputs.project_zip }}" ]; then
-            echo "ERRO: O arquivo informado não existe: ${{ inputs.project_zip }}"
+          PROJECT_ZIP="${{ inputs.project_zip }}"
+
+          if [ ! -f "$PROJECT_ZIP" ]; then
+            echo "ERRO: o arquivo confirmado pelo painel não está no commit ${{ inputs.commit_sha }}: $PROJECT_ZIP"
             echo "Arquivos disponíveis em uploads:"
             find uploads -maxdepth 2 -type f -print || true
             exit 1
           fi
 
-          unzip -q "${{ inputs.project_zip }}" -d work
-
+          unzip -q "$PROJECT_ZIP" -d work
           ROOT=$(find work -type f -name gradlew -printf '%h\n' | head -n 1)
 
           if [ -z "$ROOT" ]; then
