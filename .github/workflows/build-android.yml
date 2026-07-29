@@ -42,14 +42,11 @@ jobs:
           PROJECT_ZIP="${{ inputs.project_zip }}"
           COMMIT_SHA="${{ inputs.commit_sha }}"
 
-          # Painel V4: o checkout já usa o commit exato.
           if [ -n "$COMMIT_SHA" ] && [ -f "$PROJECT_ZIP" ]; then
             echo "ZIP confirmado no commit exato: $COMMIT_SHA"
             exit 0
           fi
 
-          # Compatibilidade com painéis antigos:
-          # atualiza a branch algumas vezes até o novo upload aparecer.
           for tentativa in $(seq 1 15); do
             if [ -f "$PROJECT_ZIP" ]; then
               echo "ZIP confirmado: $PROJECT_ZIP"
@@ -64,7 +61,7 @@ jobs:
 
           echo "ERRO: o arquivo informado não foi encontrado: $PROJECT_ZIP"
           echo "Arquivos disponíveis em uploads:"
-          find uploads -maxdepth 2 -type f -print || true
+          find uploads -maxdepth 3 -type f -print || true
           exit 1
 
       - name: Configurar Java
@@ -80,41 +77,98 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p work
+
+          rm -rf work output
+          mkdir -p work output
 
           PROJECT_ZIP="${{ inputs.project_zip }}"
           unzip -q "$PROJECT_ZIP" -d work
 
-          ROOT=$(find work -type f -name gradlew -printf '%h\n' | head -n 1)
+          echo "Conteúdo extraído:"
+          find work -maxdepth 4 -type f | sort | head -n 300
 
-          if [ -z "$ROOT" ]; then
-            echo "ERRO: gradlew não encontrado dentro do ZIP."
-            find work -maxdepth 4 -type f -print
+          # Primeiro tenta localizar o Gradle Wrapper.
+          WRAPPER=$(find work -type f -name gradlew | head -n 1 || true)
+
+          if [ -n "$WRAPPER" ]; then
+            ROOT="$(dirname "$WRAPPER")"
+            BUILD_MODE="wrapper"
+            chmod +x "$WRAPPER"
+          else
+            # Se o ZIP não tiver gradlew, procura a raiz real do projeto Gradle.
+            SETTINGS=$(find work -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1 || true)
+
+            if [ -z "$SETTINGS" ]; then
+              echo "ERRO: o ZIP não contém gradlew nem settings.gradle/settings.gradle.kts."
+              echo "Envie um projeto Android Studio completo, e não apenas APK, pasta app ou arquivos soltos."
+              exit 1
+            fi
+
+            ROOT="$(dirname "$SETTINGS")"
+            BUILD_MODE="system"
+          fi
+
+          # Confirma que existe algum arquivo de build na raiz.
+          if [ ! -f "$ROOT/build.gradle" ] && [ ! -f "$ROOT/build.gradle.kts" ]; then
+            echo "ERRO: build.gradle/build.gradle.kts não encontrado na raiz detectada: $ROOT"
             exit 1
           fi
 
           echo "PROJECT_ROOT=$ROOT" >> "$GITHUB_ENV"
-          chmod +x "$ROOT/gradlew"
+          echo "BUILD_MODE=$BUILD_MODE" >> "$GITHUB_ENV"
+
+          echo "Raiz detectada: $ROOT"
+          echo "Modo de compilação: $BUILD_MODE"
+
+      - name: Configurar Gradle sem wrapper
+        if: ${{ env.BUILD_MODE == 'system' }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
       - name: Compilar APK debug
         if: ${{ inputs.build_type == 'debug' }}
+        shell: bash
         run: |
+          set -euo pipefail
           cd "$PROJECT_ROOT"
-          ./gradlew assembleDebug --stacktrace
+
+          if [ "$BUILD_MODE" = "wrapper" ]; then
+            ./gradlew assembleDebug --stacktrace --no-daemon
+          else
+            gradle assembleDebug --stacktrace --no-daemon
+          fi
 
       - name: Compilar APK release
         if: ${{ inputs.build_type == 'release' }}
-        run: |
-          cd "$PROJECT_ROOT"
-          ./gradlew assembleRelease --stacktrace
-
-      - name: Reunir APKs
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p output
-          find "$PROJECT_ROOT" -type f -name "*.apk" -exec cp {} output/ \;
-          ls -lah output
-          test "$(find output -type f -name '*.apk' | wc -l)" -gt 0
+          cd "$PROJECT_ROOT"
+
+          if [ "$BUILD_MODE" = "wrapper" ]; then
+            ./gradlew assembleRelease --stacktrace --no-daemon
+          else
+            gradle assembleRelease --stacktrace --no-daemon
+          fi
+
+      - name: Reunir APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          find "$PROJECT_ROOT" -type f -path "*/build/outputs/apk/*" -name "*.apk" -exec cp {} output/ \;
+
+          echo "APKs encontrados:"
+          ls -lah output || true
+
+          APK_COUNT=$(find output -maxdepth 1 -type f -name "*.apk" | wc -l)
+
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERRO: a compilação terminou, mas nenhum APK foi encontrado."
+            find "$PROJECT_ROOT" -type f -name "*.apk" -print || true
+            exit 1
+          fi
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
@@ -123,4 +177,3 @@ jobs:
           path: output/*.apk
           if-no-files-found: error
           retention-days: 30
-
