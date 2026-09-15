@@ -10,7 +10,7 @@ on:
       build_type:
         description: debug ou release
         required: true
-        default: debug
+        default: release
         type: string
       commit_sha:
         description: Commit que contém o ZIP (opcional para painéis antigos)
@@ -38,29 +38,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           PROJECT_ZIP="${{ inputs.project_zip }}"
           COMMIT_SHA="${{ inputs.commit_sha }}"
-
           if [ -n "$COMMIT_SHA" ] && [ -f "$PROJECT_ZIP" ]; then
             echo "ZIP confirmado no commit exato: $COMMIT_SHA"
             exit 0
           fi
-
           for tentativa in $(seq 1 15); do
             if [ -f "$PROJECT_ZIP" ]; then
               echo "ZIP confirmado: $PROJECT_ZIP"
               exit 0
             fi
-
             echo "Aguardando o ZIP aparecer na branch (tentativa $tentativa/15)..."
             git fetch origin "${{ github.ref_name }}" --depth=1
             git reset --hard "origin/${{ github.ref_name }}"
             sleep 2
           done
-
           echo "ERRO: o arquivo informado não foi encontrado: $PROJECT_ZIP"
-          echo "Arquivos disponíveis em uploads:"
           find uploads -maxdepth 3 -type f -print || true
           exit 1
 
@@ -82,48 +76,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           rm -rf work output
           mkdir -p work output
-
           PROJECT_ZIP="${{ inputs.project_zip }}"
           unzip -q "$PROJECT_ZIP" -d work
-
-          echo "Conteúdo extraído:"
-          find work -maxdepth 4 -type f | sort | head -n 300
-
-          # Primeiro tenta localizar o Gradle Wrapper.
           WRAPPER=$(find work -type f -name gradlew | head -n 1 || true)
-
           if [ -n "$WRAPPER" ]; then
             ROOT="$(dirname "$WRAPPER")"
             BUILD_MODE="wrapper"
             chmod +x "$WRAPPER"
           else
-            # Se o ZIP não tiver gradlew, procura a raiz real do projeto Gradle.
             SETTINGS=$(find work -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1 || true)
-
             if [ -z "$SETTINGS" ]; then
-              echo "ERRO: o ZIP não contém gradlew nem settings.gradle/settings.gradle.kts."
-              echo "Envie um projeto Android Studio completo, e não apenas APK, pasta app ou arquivos soltos."
+              echo "ERRO: projeto Gradle não encontrado."
               exit 1
             fi
-
             ROOT="$(dirname "$SETTINGS")"
             BUILD_MODE="system"
           fi
-
-          # Confirma que existe algum arquivo de build na raiz.
           if [ ! -f "$ROOT/build.gradle" ] && [ ! -f "$ROOT/build.gradle.kts" ]; then
-            echo "ERRO: build.gradle/build.gradle.kts não encontrado na raiz detectada: $ROOT"
+            echo "ERRO: build.gradle não encontrado em $ROOT"
             exit 1
           fi
-
           echo "PROJECT_ROOT=$ROOT" >> "$GITHUB_ENV"
           echo "BUILD_MODE=$BUILD_MODE" >> "$GITHUB_ENV"
-
           echo "Raiz detectada: $ROOT"
-          echo "Modo de compilação: $BUILD_MODE"
 
       - name: Configurar Gradle sem wrapper
         if: ${{ env.BUILD_MODE == 'system' }}
@@ -131,26 +108,25 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Compilar APK debug
+      - name: Compilar APK debug ARM64
         if: ${{ inputs.build_type == 'debug' }}
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_ROOT"
-
           if [ "$BUILD_MODE" = "wrapper" ]; then
             ./gradlew assembleDebug --stacktrace --no-daemon
           else
             gradle assembleDebug --stacktrace --no-daemon
           fi
 
-      - name: Compilar APK release
+      - name: Compilar APK release otimizado ARM64
         if: ${{ inputs.build_type == 'release' }}
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_ROOT"
-
+          echo "[GreenPlay] Gerando APK RELEASE ARM64 otimizado."
           if [ "$BUILD_MODE" = "wrapper" ]; then
             ./gradlew assembleRelease --stacktrace --no-daemon
           else
@@ -161,17 +137,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           find "$PROJECT_ROOT" -type f -path "*/build/outputs/apk/*" -name "*.apk" -exec cp {} output/ \;
-
           echo "APKs encontrados:"
           ls -lah output || true
-
           APK_COUNT=$(find output -maxdepth 1 -type f -name "*.apk" | wc -l)
-
           if [ "$APK_COUNT" -eq 0 ]; then
-            echo "ERRO: a compilação terminou, mas nenhum APK foi encontrado."
-            find "$PROJECT_ROOT" -type f -name "*.apk" -print || true
+            echo "ERRO: nenhum APK encontrado."
             exit 1
           fi
 
@@ -181,4 +152,5 @@ jobs:
           name: apk-${{ github.run_number }}
           path: output/*.apk
           if-no-files-found: error
+          compression-level: 0
           retention-days: 30
