@@ -1,0 +1,38 @@
+name: Test GreenPlay v16.83
+on:
+  push:
+    paths:
+      - '.github/workflows/test-v16-83.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Unpack
+        shell: bash
+        run: |
+          rm -rf work
+          mkdir work
+          unzip -q releases/GreenPlay_Android_Nativo_v16_83_fluxo_pix_automatico.zip -d work
+          echo "PROJECT_ROOT=$GITHUB_WORKSPACE/work" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Compile debug
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle assembleDebug --stacktrace --no-daemon
