@@ -1,0 +1,76 @@
+name: Inspect latest GreenPlay packages
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay.yml'
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Inspect recent ZIPs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import zipfile, os, re, glob
+          from pathlib import Path
+
+          files = sorted(glob.glob('uploads/project-*.zip'), reverse=True)[:18]
+          out=[]
+          out.append('GREENPLAY LATEST PACKAGE INSPECTION')
+          out.append('')
+          patterns = [re.compile(x,re.I) for x in [r'16[._-]?82', r'72[._-]?12', r'greenplay', r'mistic', r'pix', r'pagamento', r'payment', r'plan', r'assinatura', r'subscription']]
+          text_ext={'.kt','.java','.xml','.json','.php','.js','.ts','.tsx','.jsx','.dart','.gradle','.kts','.properties','.env','.md','.txt','.yml','.yaml','.sql','.html','.css'}
+          for f in files:
+              out.append('='*100)
+              out.append(f)
+              try:
+                  with zipfile.ZipFile(f) as z:
+                      names=z.namelist()
+                      out.append(f'entries={len(names)}')
+                      out.append('top-level: ' + ', '.join(names[:25]))
+                      matched_names=[n for n in names if any(p.search(n) for p in patterns)]
+                      if matched_names:
+                          out.append('matched filenames:')
+                          out += ['  '+n for n in matched_names[:120]]
+                      hits=[]
+                      for n in names:
+                          if n.endswith('/') or Path(n).suffix.lower() not in text_ext:
+                              continue
+                          try:
+                              info=z.getinfo(n)
+                              if info.file_size>1_500_000: continue
+                              s=z.read(n).decode('utf-8','ignore')
+                          except Exception:
+                              continue
+                          if any(p.search(s) for p in patterns):
+                              lines=s.splitlines()
+                              snippets=[]
+                              for i,line in enumerate(lines):
+                                  if any(p.search(line) for p in patterns):
+                                      snippets.append(f'{i+1}: {line[:350]}')
+                                      if len(snippets)>=8: break
+                              hits.append((n,snippets))
+                      if hits:
+                          out.append('matched content:')
+                          for n,snips in hits[:80]:
+                              out.append('  FILE '+n)
+                              out += ['    '+x for x in snips]
+              except Exception as e:
+                  out.append('ERROR '+repr(e))
+              out.append('')
+          os.makedirs('inspection',exist_ok=True)
+          Path('inspection/latest_report.txt').write_text('\n'.join(out), encoding='utf-8')
+          PY
+      - name: Commit inspection report
+        shell: bash
+        run: |
+          git config user.name "GreenPlay Inspector"
+          git config user.email "actions@users.noreply.github.com"
+          git add inspection/latest_report.txt
+          git commit -m "Inspect latest GreenPlay packages" || exit 0
+          git push
