@@ -1,0 +1,28 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'fun.greenplay.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'fun.greenplay.app'
+        minSdk 25
+        targetSdk 35
+        versionCode 104
+        versionName '1.16.82.0'
+    }
+    signingConfigs {
+        stableDebug {
+            storeFile file('greenplay-debug.keystore')
+            storePassword 'greenplay_debug_2026'
+            keyAlias 'greenplay_debug'
+            keyPassword 'greenplay_debug_2026'
+        }
+    }
+    buildTypes {
+        release { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' }
+        debug {
+            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.stableDebug
+        }
+    }
+}
