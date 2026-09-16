@@ -1,0 +1,37 @@
+name: Build GreenPlay v16.83 payment flow
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v16-83.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Patch v16.82 into v16.83
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC='uploads/project-20260916-031008-938c1e.zip'
+          WORK="$RUNNER_TEMP/gp1683"
+          rm -rf "$WORK"
+          mkdir -p "$WORK"
+          unzip -q "$SRC" -d "$WORK"
+          export GP_WORK="$WORK"
+          python3 .github/scripts/patch_v1683.py
+          mkdir -p releases
+          OUT="$GITHUB_WORKSPACE/releases/GreenPlay_Android_Nativo_v16_83_fluxo_pix_automatico.zip"
+          (cd "$WORK" && zip -qr "$OUT" .)
+          echo "Created $OUT"
+      - name: Commit v16.83 ZIP
+        shell: bash
+        run: |
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/GreenPlay_Android_Nativo_v16_83_fluxo_pix_automatico.zip
+          git commit -m "GreenPlay Android v16.83 fluxo PIX automatico" || exit 0
+          git push
