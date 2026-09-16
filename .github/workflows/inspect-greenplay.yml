@@ -1,4 +1,4 @@
-name: Inspect latest GreenPlay packages
+name: Extract GreenPlay v16.82 sources
 on:
   push:
     paths:
@@ -6,71 +6,54 @@ on:
 permissions:
   contents: write
 jobs:
-  inspect:
+  extract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Inspect recent ZIPs
+      - name: Extract current v16.82 source files
         shell: bash
         run: |
           python3 - <<'PY'
-          import zipfile, os, re, glob
+          import zipfile, os, shutil
           from pathlib import Path
 
-          files = sorted(glob.glob('uploads/project-*.zip'), reverse=True)[:18]
-          out=[]
-          out.append('GREENPLAY LATEST PACKAGE INSPECTION')
-          out.append('')
-          patterns = [re.compile(x,re.I) for x in [r'16[._-]?82', r'72[._-]?12', r'greenplay', r'mistic', r'pix', r'pagamento', r'payment', r'plan', r'assinatura', r'subscription']]
-          text_ext={'.kt','.java','.xml','.json','.php','.js','.ts','.tsx','.jsx','.dart','.gradle','.kts','.properties','.env','.md','.txt','.yml','.yaml','.sql','.html','.css'}
-          for f in files:
-              out.append('='*100)
-              out.append(f)
-              try:
-                  with zipfile.ZipFile(f) as z:
-                      names=z.namelist()
-                      out.append(f'entries={len(names)}')
-                      out.append('top-level: ' + ', '.join(names[:25]))
-                      matched_names=[n for n in names if any(p.search(n) for p in patterns)]
-                      if matched_names:
-                          out.append('matched filenames:')
-                          out += ['  '+n for n in matched_names[:120]]
-                      hits=[]
-                      for n in names:
-                          if n.endswith('/') or Path(n).suffix.lower() not in text_ext:
-                              continue
-                          try:
-                              info=z.getinfo(n)
-                              if info.file_size>1_500_000: continue
-                              s=z.read(n).decode('utf-8','ignore')
-                          except Exception:
-                              continue
-                          if any(p.search(s) for p in patterns):
-                              lines=s.splitlines()
-                              snippets=[]
-                              for i,line in enumerate(lines):
-                                  if any(p.search(line) for p in patterns):
-                                      snippets.append(f'{i+1}: {line[:350]}')
-                                      if len(snippets)>=8: break
-                              hits.append((n,snippets))
-                      if hits:
-                          out.append('matched content:')
-                          for n,snips in hits[:80]:
-                              out.append('  FILE '+n)
-                              out += ['    '+x for x in snips]
-              except Exception as e:
-                  out.append('ERROR '+repr(e))
-              out.append('')
-          os.makedirs('inspection',exist_ok=True)
-          Path('inspection/latest_report.txt').write_text('\n'.join(out), encoding='utf-8')
+          zpath='uploads/project-20260916-031008-938c1e.zip'
+          wanted=[
+            'README_V16_82_PLANOS_COMPACTOS_PIX_SEM_CPF_INICIAL.txt',
+            'README_V16_81_PLANOS_REFERENCIA.txt',
+            'README_V16_80_PLANOS_POR_REVENDA.txt',
+            'app/build.gradle',
+            'app/src/main/AndroidManifest.xml',
+            'app/src/main/java/fun/greenplay/app/MainActivity.java',
+            'app/src/main/java/fun/greenplay/app/Api.java',
+          ]
+          root=Path('inspection/v16_82')
+          if root.exists(): shutil.rmtree(root)
+          root.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(zpath) as z:
+              names=set(z.namelist())
+              for n in wanted:
+                  if n in names:
+                      dst=root/n
+                      dst.parent.mkdir(parents=True,exist_ok=True)
+                      dst.write_bytes(z.read(n))
+              # Also copy any root README mentioning payment/plans/Pix/MisticPay.
+              for n in z.namelist():
+                  low=n.lower()
+                  if '/' in n or not n.lower().endswith(('.txt','.md')):
+                      continue
+                  if any(k in low for k in ('pix','mistic','pagamento','plano','assinatura')):
+                      dst=root/n
+                      dst.parent.mkdir(parents=True,exist_ok=True)
+                      dst.write_bytes(z.read(n))
           PY
-      - name: Commit inspection report
+      - name: Commit extracted sources
         shell: bash
         run: |
           git config user.name "GreenPlay Inspector"
           git config user.email "actions@users.noreply.github.com"
-          git add inspection/latest_report.txt
-          git commit -m "Inspect latest GreenPlay packages" || exit 0
+          git add inspection/v16_82
+          git commit -m "Extract GreenPlay v16.82 payment sources" || exit 0
           git push
