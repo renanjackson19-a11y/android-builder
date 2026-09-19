@@ -129,10 +129,47 @@ jobs:
           echo "Raiz detectada: $ROOT"
 
       - name: Configurar Gradle sem wrapper
+        id: setup_gradle
         if: ${{ env.BUILD_MODE == 'system' }}
+        continue-on-error: true
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Garantir Gradle 8.9
+        if: ${{ env.BUILD_MODE == 'system' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gradle --version 2>/dev/null | grep -q "Gradle 8.9"; then
+            echo "Gradle 8.9 já está disponível."
+            gradle --version
+            exit 0
+          fi
+
+          echo "setup-gradle não deixou o Gradle 8.9 pronto. Usando fallback com tentativas."
+          rm -rf "$HOME/gradle-8.9" "$RUNNER_TEMP/gradle-8.9-bin.zip"
+
+          for tentativa in 1 2 3 4 5; do
+            echo "Baixando Gradle 8.9 (tentativa $tentativa/5)..."
+            if curl -fL --retry 3 --retry-delay 3 --retry-all-errors \
+              --connect-timeout 20 --max-time 180 \
+              "https://services.gradle.org/distributions/gradle-8.9-bin.zip" \
+              -o "$RUNNER_TEMP/gradle-8.9-bin.zip"; then
+              break
+            fi
+            rm -f "$RUNNER_TEMP/gradle-8.9-bin.zip"
+            sleep $((tentativa * 3))
+          done
+
+          test -s "$RUNNER_TEMP/gradle-8.9-bin.zip"
+          unzip -q "$RUNNER_TEMP/gradle-8.9-bin.zip" -d "$HOME"
+          test -x "$HOME/gradle-8.9/bin/gradle"
+          echo "$HOME/gradle-8.9/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/gradle-8.9/bin:$PATH"
+          gradle --version | grep "Gradle 8.9"
 
       - name: Compilar APK debug ARM64
         if: ${{ inputs.build_type == 'debug' }}
