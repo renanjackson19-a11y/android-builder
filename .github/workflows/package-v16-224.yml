@@ -1,0 +1,78 @@
+name: Package and validate GreenPlay v16.224
+
+on:
+  push:
+    paths:
+      - .github/workflows/package-v16-224.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  package_validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Prepare GreenPlay v16.224
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work-v16224 releases/GreenPlay_Android_Nativo_v16_224_DETALHE_SEMPRE_NO_TOPO.zip
+          mkdir -p work-v16224 releases
+          unzip -q releases/GreenPlay_Android_Nativo_v16_223_DETALHES_TV_CORRIGIDOS.zip -d work-v16224
+          test -d work-v16224/gp_v16223
+          mv work-v16224/gp_v16223 work-v16224/gp_v16224
+          cp inspection/current/app/src/main/java/fun/greenplay/app/MainActivity.java work-v16224/gp_v16224/app/src/main/java/fun/greenplay/app/MainActivity.java
+          sed -i "s/versionCode 234/versionCode 235/" work-v16224/gp_v16224/app/build.gradle
+          sed -i "s/versionName '1.16.223.0'/versionName '1.16.224.0'/" work-v16224/gp_v16224/app/build.gradle
+          grep -q "versionCode 235" work-v16224/gp_v16224/app/build.gradle
+          grep -q "versionName '1.16.224.0'" work-v16224/gp_v16224/app/build.gradle
+          printf '%s\n'             'GreenPlay v16.224 - detalhe sempre abre no topo'             ''             '- Corrige o caso em que a tela de detalhes abria ja rolada para baixo.'             '- O banner/hero, voltar e favorito ficam visiveis desde o primeiro frame.'             '- O foco inicial na TV fica no botao voltar, sem empurrar a tela ate Assistir.'             '- Mantidas todas as correcoes da v16.223 e v16.222.'             > work-v16224/gp_v16224/README_V16_224_DETALHE_TOPO.txt
+          (cd work-v16224 && zip -qr ../releases/GreenPlay_Android_Nativo_v16_224_DETALHE_SEMPRE_NO_TOPO.zip gp_v16224)
+          unzip -tq releases/GreenPlay_Android_Nativo_v16_224_DETALHE_SEMPRE_NO_TOPO.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compile debug validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work-v16224/gp_v16224
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Commit full ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/GreenPlay_Android_Nativo_v16_224_DETALHE_SEMPRE_NO_TOPO.zip
+          git commit -m "GreenPlay v16.224 detail top fix" || exit 0
+          git push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay_Android_Nativo_v16_224_DETALHE_SEMPRE_NO_TOPO
+          path: releases/GreenPlay_Android_Nativo_v16_224_DETALHE_SEMPRE_NO_TOPO.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
