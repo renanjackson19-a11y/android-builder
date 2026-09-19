@@ -1,0 +1,86 @@
+name: Package and validate GreenPlay v16.228
+
+on:
+  push:
+    paths:
+      - .github/workflows/package-v16-228.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  package_validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Prepare GreenPlay v16.228
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work-v16228 releases/GreenPlay_Android_Nativo_v16_228_MODAL_TV_E_ESTABILIDADE.zip
+          mkdir -p work-v16228 releases
+          unzip -q releases/GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL.zip -d work-v16228
+          INNER=$(find work-v16228 -maxdepth 2 -type f -name 'GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL.zip' | head -n1 || true)
+          if [ -n "$INNER" ]; then
+            mkdir -p work-v16228/inner
+            unzip -q "$INNER" -d work-v16228/inner
+            rm -rf work-v16228/gp_v16227
+            mv work-v16228/inner/gp_v16227 work-v16228/gp_v16227
+          fi
+          test -d work-v16228/gp_v16227
+          mv work-v16228/gp_v16227 work-v16228/gp_v16228
+          cp inspection/current/app/src/main/java/fun/greenplay/app/MainActivity.java work-v16228/gp_v16228/app/src/main/java/fun/greenplay/app/MainActivity.java
+          cp inspection/current/app/src/main/java/fun/greenplay/app/PlayerActivity.java work-v16228/gp_v16228/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+          sed -i "s/versionCode 238/versionCode 239/" work-v16228/gp_v16228/app/build.gradle
+          sed -i "s/versionName '1.16.227.0'/versionName '1.16.228.0'/" work-v16228/gp_v16228/app/build.gradle
+          grep -q "versionCode 239" work-v16228/gp_v16228/app/build.gradle
+          grep -q "versionName '1.16.228.0'" work-v16228/gp_v16228/app/build.gradle
+          printf '%s\n'             'GreenPlay v16.228 - modal TV e estabilidade'             ''             '- O painel Assistir/Baixar no modo TV/TV Box agora é overlay interno do app e ocupa 100%% da largura, sem margem lateral do Dialog.'             '- Filmes e episódios usam o mesmo painel corrigido.'             '- Removido o carregamento em massa de centenas de cards/imagens em segundo plano.'             '- A categoria continua sem limite de títulos, mas os cards são materializados conforme a rolagem para evitar OOM/fechamento do app.'             '- Abertura do player protegida contra falha síncrona.'             '- Mantidas todas as correções anteriores.'             > work-v16228/gp_v16228/README_V16_228_MODAL_TV_ESTABILIDADE.txt
+          (cd work-v16228 && zip -qr ../releases/GreenPlay_Android_Nativo_v16_228_MODAL_TV_E_ESTABILIDADE.zip gp_v16228)
+          unzip -tq releases/GreenPlay_Android_Nativo_v16_228_MODAL_TV_E_ESTABILIDADE.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compile debug validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work-v16228/gp_v16228
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Commit full ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/GreenPlay_Android_Nativo_v16_228_MODAL_TV_E_ESTABILIDADE.zip
+          git commit -m "GreenPlay v16.228 TV overlay and stability" || exit 0
+          git push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay_Android_Nativo_v16_228_MODAL_TV_E_ESTABILIDADE
+          path: releases/GreenPlay_Android_Nativo_v16_228_MODAL_TV_E_ESTABILIDADE.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
