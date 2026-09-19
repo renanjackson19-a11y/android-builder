@@ -1,4 +1,4 @@
-name: Extract latest GreenPlay sources
+name: Package GreenPlay v16.221 final
 
 on:
   push:
@@ -9,59 +9,69 @@ permissions:
   contents: write
 
 jobs:
-  extract:
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Extract latest GreenPlay text sources
+      - name: Assemble corrected source ZIP
         shell: bash
         run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir -p work releases
+          unzip -q uploads/project-20260919-000923-73d8cc.zip -d work
+
           python3 - <<'PY'
-          import zipfile, shutil
           from pathlib import Path
+          mains=list(Path('work').glob('**/app/src/main/java/fun/greenplay/app/MainActivity.java'))
+          if not mains:
+              raise SystemExit('MainActivity not found in source ZIP')
+          main=min(mains,key=lambda p:len(str(p)))
+          project=main.parents[6]
 
-          zpath='uploads/project-20260919-000923-73d8cc.zip'
-          root=Path('inspection/current')
-          if root.exists():
-              shutil.rmtree(root)
-          root.mkdir(parents=True, exist_ok=True)
+          patched=Path('inspection/current/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          if not patched.exists():
+              raise SystemExit('Patched MainActivity not found')
+          main.write_bytes(patched.read_bytes())
 
-          allowed_ext={'.java','.kt','.xml','.gradle','.kts','.properties','.txt','.md','.json'}
-          with zipfile.ZipFile(zpath) as z:
-              names=z.namelist()
-              # Detect project root (there may be both root project and a nested duplicate).
-              candidates=[]
-              for n in names:
-                  if n.endswith('app/src/main/java/fun/greenplay/app/MainActivity.java'):
-                      candidates.append(n[:-len('app/src/main/java/fun/greenplay/app/MainActivity.java')])
-              prefix=min(candidates,key=len) if candidates else ''
-              (root/'SOURCE_PREFIX.txt').write_text(prefix,encoding='utf-8')
-              for n in names:
-                  if prefix and not n.startswith(prefix):
-                      continue
-                  rel=n[len(prefix):] if prefix else n
-                  if not rel or rel.endswith('/'):
-                      continue
-                  p=Path(rel)
-                  if p.suffix.lower() not in allowed_ext:
-                      continue
-                  if rel.startswith('app/src/main/') or rel in {
-                      'app/build.gradle','app/build.gradle.kts','build.gradle','build.gradle.kts',
-                      'settings.gradle','settings.gradle.kts','gradle.properties'
-                  } or p.name.upper().startswith('README'):
-                      dst=root/rel
-                      dst.parent.mkdir(parents=True,exist_ok=True)
-                      dst.write_bytes(z.read(n))
+          gradle=project/'app/build.gradle'
+          g=gradle.read_text(encoding='utf-8')
+          if "versionCode 231" in g:
+              g=g.replace("versionCode 231","versionCode 232")
+          if "versionName '1.16.220.0'" in g:
+              g=g.replace("versionName '1.16.220.0'","versionName '1.16.221.0'")
+          gradle.write_text(g,encoding='utf-8')
+
+          (project/'README_V16_221_CORRECOES_FINAIS.txt').write_text(
+          """GreenPlay v16.221 - correções finais
+
+- Loading único e igual no início e na troca celular/TV; removida a tela "Tela ajustada".
+- Textos de progresso de logos/EPG podem quebrar linha sem corte.
+- Filmes, Séries e Kids na TV: categorias fixas à esquerda, com rolagem independente.
+- Grid de capas usa a largura disponível para reduzir espaço vazio à direita.
+- Favoritos e Downloads: opções Filmes/Séries/TV centralizadas e com largura igual.
+- Player TV recebe relayout imediato/repetido ao entrar no modo cinema e ao fechar a lista para evitar a lateral preta temporária.
+- Menu TV/Destaque/Filmes/Séries/Favoritos levemente maior.
+- Mantidas as correções anteriores de foco, controle remoto, ANR, EPG, logos e navegação.
+""",encoding='utf-8')
+          print(project)
           PY
 
-      - name: Commit extracted sources
+          rm -f releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+          (cd work && zip -qr ../releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip .)
+          test -s releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+          unzip -tq releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+          ls -lh releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+
+      - name: Commit final ZIP
         shell: bash
         run: |
-          git config user.name "GreenPlay Inspector"
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
           git config user.email "actions@users.noreply.github.com"
-          git add inspection/current
-          git commit -m "Extract latest GreenPlay source for TV fixes" || exit 0
+          git add releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+          git commit -m "GreenPlay v16.221 corrected source" || exit 0
           git push
