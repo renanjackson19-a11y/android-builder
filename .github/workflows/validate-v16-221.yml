@@ -1,0 +1,46 @@
+name: Validate GreenPlay v16.221
+
+on:
+  push:
+    paths:
+      - .github/workflows/validate-v16-221.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Unpack source
+        shell: bash
+        run: |
+          rm -rf work-v16221
+          mkdir work-v16221
+          unzip -q releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip -d work-v16221
+          echo "PROJECT_ROOT=$GITHUB_WORKSPACE/work-v16221/gp_v16220" >> "$GITHUB_ENV"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compile debug
+        shell: bash
+        run: |
+          cd "$PROJECT_ROOT"
+          gradle assembleDebug --stacktrace --no-daemon
