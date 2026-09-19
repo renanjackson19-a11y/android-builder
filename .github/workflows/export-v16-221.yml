@@ -1,0 +1,22 @@
+name: Export GreenPlay v16.221
+
+on:
+  push:
+    paths:
+      - .github/workflows/export-v16-221.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS
+          path: releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
