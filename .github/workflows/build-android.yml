@@ -80,6 +80,29 @@ jobs:
           mkdir -p work output
           PROJECT_ZIP="${{ inputs.project_zip }}"
           unzip -q "$PROJECT_ZIP" -d work
+
+          # Alguns navegadores/painéis podem enviar um ZIP de artefato contendo
+          # outro ZIP do projeto. Desembrulha automaticamente até 3 níveis.
+          for nivel in 1 2 3; do
+            WRAPPER=$(find work -type f -name gradlew | head -n 1 || true)
+            SETTINGS=$(find work -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1 || true)
+            if [ -n "$WRAPPER" ] || [ -n "$SETTINGS" ]; then
+              break
+            fi
+
+            mapfile -t INNER_ZIPS < <(find work -type f -name "*.zip" -print)
+            if [ "${#INNER_ZIPS[@]}" -ne 1 ]; then
+              break
+            fi
+
+            echo "ZIP interno detectado (nível $nivel): ${INNER_ZIPS[0]}"
+            rm -rf work_next
+            mkdir -p work_next
+            unzip -q "${INNER_ZIPS[0]}" -d work_next
+            rm -rf work
+            mv work_next work
+          done
+
           WRAPPER=$(find work -type f -name gradlew | head -n 1 || true)
           if [ -n "$WRAPPER" ]; then
             ROOT="$(dirname "$WRAPPER")"
@@ -88,12 +111,15 @@ jobs:
           else
             SETTINGS=$(find work -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1 || true)
             if [ -z "$SETTINGS" ]; then
-              echo "ERRO: projeto Gradle não encontrado."
+              echo "ERRO: projeto Gradle não encontrado nem após desembrulhar ZIP interno."
+              echo "Conteúdo recebido:"
+              find work -maxdepth 4 -type f | head -n 80 || true
               exit 1
             fi
             ROOT="$(dirname "$SETTINGS")"
             BUILD_MODE="system"
           fi
+
           if [ ! -f "$ROOT/build.gradle" ] && [ ! -f "$ROOT/build.gradle.kts" ]; then
             echo "ERRO: build.gradle não encontrado em $ROOT"
             exit 1
