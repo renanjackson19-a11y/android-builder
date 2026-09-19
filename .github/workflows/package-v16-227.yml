@@ -1,0 +1,87 @@
+name: Package and validate GreenPlay v16.227
+
+on:
+  push:
+    paths:
+      - .github/workflows/package-v16-227.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  package_validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Prepare GreenPlay v16.227
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work-v16227 releases/GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL.zip
+          mkdir -p work-v16227 releases
+          unzip -q releases/GreenPlay_Android_Nativo_v16_225_FOCO_CONTROLE_PLAYER_TV.zip -d work-v16227
+          # artifact ZIP may contain an inner ZIP
+          INNER=$(find work-v16227 -maxdepth 2 -type f -name 'GreenPlay_Android_Nativo_v16_225_FOCO_CONTROLE_PLAYER_TV.zip' | head -n1 || true)
+          if [ -n "$INNER" ]; then
+            mkdir -p work-v16227/inner
+            unzip -q "$INNER" -d work-v16227/inner
+            rm -rf work-v16227/gp_v16225
+            mv work-v16227/inner/gp_v16225 work-v16227/gp_v16225
+          fi
+          test -d work-v16227/gp_v16225
+          mv work-v16227/gp_v16225 work-v16227/gp_v16227
+          cp inspection/current/app/src/main/java/fun/greenplay/app/MainActivity.java work-v16227/gp_v16227/app/src/main/java/fun/greenplay/app/MainActivity.java
+          cp inspection/current/app/src/main/java/fun/greenplay/app/PlayerActivity.java work-v16227/gp_v16227/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+          sed -i "s/versionCode 236/versionCode 238/" work-v16227/gp_v16227/app/build.gradle
+          sed -i "s/versionName '1.16.225.0'/versionName '1.16.227.0'/" work-v16227/gp_v16227/app/build.gradle
+          grep -q "versionCode 238" work-v16227/gp_v16227/app/build.gradle
+          grep -q "versionName '1.16.227.0'" work-v16227/gp_v16227/app/build.gradle
+          printf '%s\n'             'GreenPlay v16.227 - modal TV com largura total'             ''             '- Corrige o espaço vazio lateral no painel Assistir/Baixar do modo TV/TV Box.'             '- A janela de ações agora usa a tela inteira como host e o cartão ocupa toda a largura útil.'             '- Filmes e episódios usam o mesmo ajuste.'             '- Mantido o foco verde do controle remoto no player e todas as correções anteriores.'             > work-v16227/gp_v16227/README_V16_227_MODAL_TV_LARGURA_TOTAL.txt
+          (cd work-v16227 && zip -qr ../releases/GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL.zip gp_v16227)
+          unzip -tq releases/GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compile debug validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work-v16227/gp_v16227
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Commit full ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL.zip
+          git commit -m "GreenPlay v16.227 full-width TV action sheet" || exit 0
+          git push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL
+          path: releases/GreenPlay_Android_Nativo_v16_227_MODAL_TV_LARGURA_TOTAL.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
