@@ -1,10 +1,13 @@
-name: Extract GreenPlay v16.82 sources
+name: Extract latest GreenPlay sources
+
 on:
   push:
     paths:
       - '.github/workflows/inspect-greenplay.yml'
+
 permissions:
   contents: write
+
 jobs:
   extract:
     runs-on: ubuntu-latest
@@ -12,48 +15,53 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Extract current v16.82 source files
+
+      - name: Extract latest GreenPlay text sources
         shell: bash
         run: |
           python3 - <<'PY'
-          import zipfile, os, shutil
+          import zipfile, shutil
           from pathlib import Path
 
-          zpath='uploads/project-20260916-031008-938c1e.zip'
-          wanted=[
-            'README_V16_82_PLANOS_COMPACTOS_PIX_SEM_CPF_INICIAL.txt',
-            'README_V16_81_PLANOS_REFERENCIA.txt',
-            'README_V16_80_PLANOS_POR_REVENDA.txt',
-            'app/build.gradle',
-            'app/src/main/AndroidManifest.xml',
-            'app/src/main/java/fun/greenplay/app/MainActivity.java',
-            'app/src/main/java/fun/greenplay/app/Api.java',
-          ]
-          root=Path('inspection/v16_82')
-          if root.exists(): shutil.rmtree(root)
+          zpath='uploads/project-20260919-000923-73d8cc.zip'
+          root=Path('inspection/current')
+          if root.exists():
+              shutil.rmtree(root)
           root.mkdir(parents=True, exist_ok=True)
+
+          allowed_ext={'.java','.kt','.xml','.gradle','.kts','.properties','.txt','.md','.json'}
           with zipfile.ZipFile(zpath) as z:
-              names=set(z.namelist())
-              for n in wanted:
-                  if n in names:
-                      dst=root/n
-                      dst.parent.mkdir(parents=True,exist_ok=True)
-                      dst.write_bytes(z.read(n))
-              # Also copy any root README mentioning payment/plans/Pix/MisticPay.
-              for n in z.namelist():
-                  low=n.lower()
-                  if '/' in n or not n.lower().endswith(('.txt','.md')):
+              names=z.namelist()
+              # Detect project root (there may be both root project and a nested duplicate).
+              candidates=[]
+              for n in names:
+                  if n.endswith('app/src/main/java/fun/greenplay/app/MainActivity.java'):
+                      candidates.append(n[:-len('app/src/main/java/fun/greenplay/app/MainActivity.java')])
+              prefix=min(candidates,key=len) if candidates else ''
+              (root/'SOURCE_PREFIX.txt').write_text(prefix,encoding='utf-8')
+              for n in names:
+                  if prefix and not n.startswith(prefix):
                       continue
-                  if any(k in low for k in ('pix','mistic','pagamento','plano','assinatura')):
-                      dst=root/n
+                  rel=n[len(prefix):] if prefix else n
+                  if not rel or rel.endswith('/'):
+                      continue
+                  p=Path(rel)
+                  if p.suffix.lower() not in allowed_ext:
+                      continue
+                  if rel.startswith('app/src/main/') or rel in {
+                      'app/build.gradle','app/build.gradle.kts','build.gradle','build.gradle.kts',
+                      'settings.gradle','settings.gradle.kts','gradle.properties'
+                  } or p.name.upper().startswith('README'):
+                      dst=root/rel
                       dst.parent.mkdir(parents=True,exist_ok=True)
                       dst.write_bytes(z.read(n))
           PY
+
       - name: Commit extracted sources
         shell: bash
         run: |
           git config user.name "GreenPlay Inspector"
           git config user.email "actions@users.noreply.github.com"
-          git add inspection/v16_82
-          git commit -m "Extract GreenPlay v16.82 payment sources" || exit 0
+          git add inspection/current
+          git commit -m "Extract latest GreenPlay source for TV fixes" || exit 0
           git push
