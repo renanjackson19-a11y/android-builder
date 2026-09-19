@@ -1,0 +1,13 @@
+package fun.greenplay.app;
+import android.os.*;import org.json.*;import java.io.*;import java.net.*;import java.nio.charset.StandardCharsets;import java.util.*;import java.util.concurrent.*;import java.util.zip.GZIPInputStream;
+public class Api {
+ static final ExecutorService NET=Executors.newFixedThreadPool(8);
+ static final Handler MAIN=new Handler(Looper.getMainLooper());
+ static final String BASE="https://greenplay.fun/api/dtlive/";
+ static String PROVIDER="";
+ static final String TOKEN="454946ee403e82a9657eafc76091ccb6d8ccd4a8fadfca45";
+ interface CB{void ok(JSONObject j);void err(String e);}
+ static void post(String ep, Map<String,String> data, CB cb){NET.execute(()->{HttpURLConnection c=null;try{String endpoint=BASE+ep+(ep.endsWith(".php")?"":"/");if(PROVIDER!=null&&!PROVIDER.isEmpty())endpoint+="?provider_id="+URLEncoder.encode(PROVIDER,"UTF-8");URL u=new URL(endpoint);c=(HttpURLConnection)u.openConnection();c.setRequestMethod("POST");c.setConnectTimeout(12000);int readTimeout=25000;if(ep.equals("section_list"))readTimeout=190000;else if(ep.equals("content_by_category"))readTimeout=105000;else if(ep.equals("get_category"))readTimeout=40000;else if(ep.startsWith("bootstrap_home"))readTimeout=30000;c.setReadTimeout(readTimeout);c.setDoOutput(true);c.setRequestProperty("Api-Token",TOKEN);c.setRequestProperty("X-GreenPlay-Key",TOKEN);if(PROVIDER!=null&&!PROVIDER.isEmpty())c.setRequestProperty("Provider-Id",PROVIDER);c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("Accept-Encoding","gzip");JSONObject b=new JSONObject();for(String k:data.keySet())b.put(k,data.get(k));if(PROVIDER!=null&&!PROVIDER.isEmpty())b.put("provider_id",PROVIDER);try(OutputStream o=c.getOutputStream()){o.write(b.toString().getBytes(StandardCharsets.UTF_8));}int code=c.getResponseCode();InputStream raw=(code<400?c.getInputStream():c.getErrorStream());String enc=c.getContentEncoding();InputStream in=(raw!=null&&enc!=null&&enc.toLowerCase(java.util.Locale.ROOT).contains("gzip"))?new GZIPInputStream(raw):raw;String s=read(in);JSONObject j=new JSONObject(s);MAIN.post(()->cb.ok(j));}catch(Exception e){String msg=e.getMessage();MAIN.post(()->cb.err(msg));}finally{if(c!=null)c.disconnect();}});}
+ static String read(InputStream i)throws Exception{if(i==null)return "{}";BufferedReader r=new BufferedReader(new InputStreamReader(i,StandardCharsets.UTF_8),32768);StringBuilder s=new StringBuilder();char[] buf=new char[32768];int n;while((n=r.read(buf))>0)s.append(buf,0,n);return s.toString();}
+ static Map<String,String> m(String...x){Map<String,String>m=new HashMap<>();for(int i=0;i+1<x.length;i+=2)m.put(x[i],x[i+1]);return m;}
+}

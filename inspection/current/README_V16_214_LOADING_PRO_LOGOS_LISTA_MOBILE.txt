@@ -1,0 +1,1 @@
+v16.214: loading profissional sem os 3 blocos; status único com progresso; TV ao vivo não é marcado pronto antes da sincronização; lista mobile compactada para exibir nome/EPG; canais consultam get_channel tratado pelo painel v83+ para receber logos alternativas.

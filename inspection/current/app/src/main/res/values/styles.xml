@@ -1,0 +1,15 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#20E070</item>
+        <item name="android:navigationBarColor">#07110C</item>
+        <item name="android:statusBarColor">#07110C</item>
+        <item name="android:windowBackground">#07110C</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="GreenPlayCastDialogTheme" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">#20E070</item>
+        <item name="android:colorAccent">#20E070</item>
+    </style>
+</resources>

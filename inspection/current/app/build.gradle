@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'fun.greenplay.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'fun.greenplay.app'
+        minSdk 23
+        targetSdk 35
+        versionCode 231
+        versionName '1.16.220.0'
+    }
+    signingConfigs {
+        stableDebug {
+            storeFile file('greenplay-debug.keystore')
+            storePassword 'greenplay_debug_2026'
+            keyAlias 'greenplay_debug'
+            keyPassword 'greenplay_debug_2026'
+        }
+    }
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+    buildTypes {
+        release { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' }
+        debug {
+            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.stableDebug
+        }
+    }
+}
+
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.mediarouter:mediarouter:1.8.1'
+    implementation 'com.google.android.gms:play-services-cast-framework:22.3.1'
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
+}
