@@ -1,0 +1,79 @@
+name: Package and validate GreenPlay v16.222
+
+on:
+  push:
+    paths:
+      - .github/workflows/package-v16-222.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  package_validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Prepare GreenPlay v16.222
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work-v16222 output-v16222
+          mkdir -p work-v16222 output-v16222 releases
+          unzip -q releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip -d work-v16222
+          test -d work-v16222/gp_v16220
+          mv work-v16222/gp_v16220 work-v16222/gp_v16222
+          cp inspection/current/app/src/main/java/fun/greenplay/app/MainActivity.java work-v16222/gp_v16222/app/src/main/java/fun/greenplay/app/MainActivity.java
+          sed -i "s/versionCode 232/versionCode 233/" work-v16222/gp_v16222/app/build.gradle
+          sed -i "s/versionName '1.16.221.0'/versionName '1.16.222.0'/" work-v16222/gp_v16222/app/build.gradle
+          grep -q "versionCode 233" work-v16222/gp_v16222/app/build.gradle
+          grep -q "versionName '1.16.222.0'" work-v16222/gp_v16222/app/build.gradle
+          printf '%s\n'             'GreenPlay v16.222 - catalogos completos, canais completos, EPG e loading'             ''             '- Removido o limite de 48 titulos / 8 linhas nas categorias de filmes e series.'             '- Cada categoria busca todas as paginas ate a fonte terminar, sem limite artificial.'             '- Canais buscam todos os lotes por offset; removido o teto de 300 canais.'             '- Categorias de canais sempre sao atualizadas da fonte e mescladas ao cache.'             '- EPG lateral aceita duas linhas; overlay Atual/Proximo aceita tres linhas.'             '- Loading ajustado para nao cortar Canais, Logos, EPG e demais status.'             '- Mantidas todas as correcoes da v16.221.'             > work-v16222/gp_v16222/README_V16_222_CATALOGOS_COMPLETOS.txt
+          rm -f releases/GreenPlay_Android_Nativo_v16_222_CATALOGOS_COMPLETOS_EPG_LOADING.zip
+          (cd work-v16222 && zip -qr ../releases/GreenPlay_Android_Nativo_v16_222_CATALOGOS_COMPLETOS_EPG_LOADING.zip gp_v16222)
+          unzip -tq releases/GreenPlay_Android_Nativo_v16_222_CATALOGOS_COMPLETOS_EPG_LOADING.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compile debug validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work-v16222/gp_v16222
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Commit full ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/GreenPlay_Android_Nativo_v16_222_CATALOGOS_COMPLETOS_EPG_LOADING.zip
+          git commit -m "GreenPlay v16.222 complete source" || exit 0
+          git push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay_Android_Nativo_v16_222_CATALOGOS_COMPLETOS_EPG_LOADING
+          path: releases/GreenPlay_Android_Nativo_v16_222_CATALOGOS_COMPLETOS_EPG_LOADING.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
