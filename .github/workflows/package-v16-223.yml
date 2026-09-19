@@ -1,0 +1,78 @@
+name: Package and validate GreenPlay v16.223
+
+on:
+  push:
+    paths:
+      - .github/workflows/package-v16-223.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  package_validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Prepare GreenPlay v16.223
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work-v16223 releases/GreenPlay_Android_Nativo_v16_223_DETALHES_TV_CORRIGIDOS.zip
+          mkdir -p work-v16223 releases
+          unzip -q releases/GreenPlay_Android_Nativo_v16_222_CATALOGOS_COMPLETOS_EPG_LOADING.zip -d work-v16223
+          test -d work-v16223/gp_v16222
+          mv work-v16223/gp_v16222 work-v16223/gp_v16223
+          cp inspection/current/app/src/main/java/fun/greenplay/app/MainActivity.java work-v16223/gp_v16223/app/src/main/java/fun/greenplay/app/MainActivity.java
+          sed -i "s/versionCode 233/versionCode 234/" work-v16223/gp_v16223/app/build.gradle
+          sed -i "s/versionName '1.16.222.0'/versionName '1.16.223.0'/" work-v16223/gp_v16223/app/build.gradle
+          grep -q "versionCode 234" work-v16223/gp_v16223/app/build.gradle
+          grep -q "versionName '1.16.223.0'" work-v16223/gp_v16223/app/build.gradle
+          printf '%s\n'             'GreenPlay v16.223 - detalhes TV corrigidos'             ''             '- Ao abrir detalhes na TV, a tela de categorias/grid fica totalmente oculta.'             '- A tela de detalhes agora tem fundo opaco e fica na frente do conteúdo anterior.'             '- Ao voltar, a tela anterior é restaurada corretamente.'             '- Mantidas todas as correções da v16.222: categorias completas, filmes/séries sem limite, canais completos, EPG e loading.'             > work-v16223/gp_v16223/README_V16_223_DETALHES_TV.txt
+          (cd work-v16223 && zip -qr ../releases/GreenPlay_Android_Nativo_v16_223_DETALHES_TV_CORRIGIDOS.zip gp_v16223)
+          unzip -tq releases/GreenPlay_Android_Nativo_v16_223_DETALHES_TV_CORRIGIDOS.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compile debug validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work-v16223/gp_v16223
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Commit full ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/GreenPlay_Android_Nativo_v16_223_DETALHES_TV_CORRIGIDOS.zip
+          git commit -m "GreenPlay v16.223 corrected TV details" || exit 0
+          git push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay_Android_Nativo_v16_223_DETALHES_TV_CORRIGIDOS
+          path: releases/GreenPlay_Android_Nativo_v16_223_DETALHES_TV_CORRIGIDOS.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
