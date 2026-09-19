@@ -1,0 +1,217 @@
+name: Build GreenPlay v16.221 final source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v16-221-final.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Patch latest GreenPlay source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir -p work releases
+          unzip -q uploads/project-20260919-000923-73d8cc.zip -d work
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          mains=list(Path('work').glob('**/app/src/main/java/fun/greenplay/app/MainActivity.java'))
+          if not mains:
+              raise SystemExit('MainActivity.java não encontrado')
+          # Prefer the shortest project path (the actual top-level source)
+          main=min(mains,key=lambda p:len(str(p)))
+          project=main.parents[6]
+          gradle=project/'app/build.gradle'
+          if not gradle.exists():
+              raise SystemExit(f'app/build.gradle não encontrado em {project}')
+
+          s=main.read_text(encoding='utf-8')
+
+          def must_replace(old,new,label):
+              global s
+              count=s.count(old)
+              if count < 1:
+                  raise SystemExit(f'Patch não encontrado: {label}')
+              s=s.replace(old,new)
+              print(label, count)
+
+          def replace_method(start_marker,end_marker,new_text,label):
+              global s
+              a=s.find(start_marker)
+              if a < 0:
+                  raise SystemExit(f'Início não encontrado: {label}')
+              b=s.find(end_marker,a+len(start_marker))
+              if b < 0:
+                  raise SystemExit(f'Fim não encontrado: {label}')
+              s=s[:a]+new_text.rstrip()+"\n "+s[b:]
+              print(label, 'ok')
+
+          # Version
+          must_replace('// GreenPlay v16.220','// GreenPlay v16.221','versão MainActivity')
+
+          # TV header: slightly larger labels, keeping Futebol/Kids logos untouched.
+          must_replace('uiTextSize(navTv,14);menu.addView(navTv,new LinearLayout.LayoutParams(dp(48),dp(58)))',
+                       'uiTextSize(navTv,16);menu.addView(navTv,new LinearLayout.LayoutParams(dp(54),dp(58)))','TV header TV')
+          must_replace('uiTextSize(navHome,14);menu.addView(navHome,new LinearLayout.LayoutParams(dp(96),dp(58)))',
+                       'uiTextSize(navHome,16);menu.addView(navHome,new LinearLayout.LayoutParams(dp(106),dp(58)))','TV header Destaque')
+          must_replace('uiTextSize(navMovies,14);menu.addView(navMovies,new LinearLayout.LayoutParams(dp(70),dp(58)))',
+                       'uiTextSize(navMovies,16);menu.addView(navMovies,new LinearLayout.LayoutParams(dp(78),dp(58)))','TV header Filmes')
+          must_replace('uiTextSize(navSeries,14);menu.addView(navSeries,new LinearLayout.LayoutParams(dp(70),dp(58)))',
+                       'uiTextSize(navSeries,16);menu.addView(navSeries,new LinearLayout.LayoutParams(dp(78),dp(58)))','TV header Séries')
+          must_replace('uiTextSize(navFav,14);navFav.setSingleLine(true);navFav.setEllipsize(null);menu.addView(navFav,new LinearLayout.LayoutParams(dp(100),dp(58)))',
+                       'uiTextSize(navFav,16);navFav.setSingleLine(true);navFav.setEllipsize(null);menu.addView(navFav,new LinearLayout.LayoutParams(dp(112),dp(58)))','TV header Favoritos')
+
+          # One unified loading screen for normal startup and mode changes.
+          new_mode_loading=r'''
+ void showModeReloadScreenNow(){
+  modeReloadScreen=true;base(true);root.setPadding(dp(22),dp(10),dp(22),dp(18));
+  LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setGravity(Gravity.CENTER_HORIZONTAL);root.addView(c,new LinearLayout.LayoutParams(-1,-1));
+  Space topFlex=new Space(this);c.addView(topFlex,new LinearLayout.LayoutParams(1,0,1));
+  ImageView logo=new ImageView(this);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);applyAppLogo(logo);LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,dp(84));llp.setMargins(dp(54),0,dp(54),dp(14));c.addView(logo,llp);
+  TextView title=t("Preparando sua experiência",24);title.setTypeface(null,1);title.setGravity(Gravity.CENTER);title.setPadding(0,0,0,0);c.addView(title,new LinearLayout.LayoutParams(-1,dp(42)));
+  TextView sub=t("Conteúdo, canais, capas e programação em um só lugar",13);sub.setTextColor(0xffaeb8b3);sub.setGravity(Gravity.CENTER);sub.setPadding(dp(12),0,dp(12),0);LinearLayout.LayoutParams subLp=new LinearLayout.LayoutParams(-1,dp(34));subLp.setMargins(0,0,0,dp(18));c.addView(sub,subLp);
+  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setGravity(Gravity.CENTER_HORIZONTAL);panel.setPadding(dp(8),dp(4),dp(8),dp(4));LinearLayout.LayoutParams panelLp=new LinearLayout.LayoutParams(-1,-2);panelLp.setMargins(dp(14),0,dp(14),dp(18));c.addView(panel,panelLp);
+  TextView eyebrow=t("SINCRONIZANDO CONTEÚDO",tvMode?11:10);eyebrow.setTextColor(0xff7fe3a6);eyebrow.setTypeface(null,1);eyebrow.setLetterSpacing(.12f);eyebrow.setGravity(Gravity.CENTER);eyebrow.setIncludeFontPadding(false);LinearLayout.LayoutParams eyeLp=new LinearLayout.LayoutParams(-1,dp(tvMode?30:28));eyeLp.setMargins(0,dp(2),0,dp(2));panel.addView(eyebrow,eyeLp);
+  modeTransitionPercent=t("10%",tvMode?42:36);modeTransitionPercent.setTextColor(GREEN);modeTransitionPercent.setTypeface(null,1);modeTransitionPercent.setGravity(Gravity.CENTER);modeTransitionPercent.setIncludeFontPadding(false);LinearLayout.LayoutParams pctLp=new LinearLayout.LayoutParams(-1,dp(56));pctLp.setMargins(0,dp(3),0,0);panel.addView(modeTransitionPercent,pctLp);
+  modeTransitionStatus=t("Conectando ao servidor",tvMode?21:18);modeTransitionStatus.setTypeface(null,1);modeTransitionStatus.setGravity(Gravity.CENTER);modeTransitionStatus.setTextColor(Color.WHITE);panel.addView(modeTransitionStatus,new LinearLayout.LayoutParams(-1,dp(34)));
+  modeTransitionDetail=t("Validando acesso e sincronizando o catálogo completo…",tvMode?13:12);modeTransitionDetail.setTextColor(0xffa6b0ab);modeTransitionDetail.setGravity(Gravity.CENTER);modeTransitionDetail.setMaxLines(2);modeTransitionDetail.setEllipsize(android.text.TextUtils.TruncateAt.END);modeTransitionDetail.setLineSpacing(0,1.08f);modeTransitionDetail.setPadding(dp(18),dp(2),dp(18),dp(2));LinearLayout.LayoutParams detailLp=new LinearLayout.LayoutParams(-1,-2);detailLp.setMargins(0,0,0,dp(2));panel.addView(modeTransitionDetail,detailLp);
+  modeTransitionProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);modeTransitionProgress.setIndeterminate(false);modeTransitionProgress.setMax(100);modeTransitionProgress.setProgress(10);try{modeTransitionProgress.getProgressDrawable().setColorFilter(GREEN,android.graphics.PorterDuff.Mode.SRC_IN);}catch(Exception ignored){}LinearLayout.LayoutParams prLp=new LinearLayout.LayoutParams(-1,dp(5));prLp.setMargins(dp(28),dp(12),dp(28),dp(8));panel.addView(modeTransitionProgress,prLp);
+  TextView footer=t("FILMES  •  SÉRIES  •  CANAIS  •  CAPAS  •  LOGOS  •  EPG",9);footer.setTextColor(0xff66766e);footer.setGravity(Gravity.CENTER);footer.setLetterSpacing(.055f);footer.setIncludeFontPadding(true);panel.addView(footer,new LinearLayout.LayoutParams(-1,dp(32)));
+  Space bottomFlex=new Space(this);c.addView(bottomFlex,new LinearLayout.LayoutParams(1,0,1));
+ }'''
+          replace_method('void showModeReloadScreenNow(){','void updateModeTransition(',new_mode_loading,'loading único troca de modo')
+
+          must_replace('showModeReloadScreenNow();updateModeTransition(10,"Ajustando modo de exibição",modeSwitchTargetTv?"Preparando interface de TV / TV Box…":"Preparando interface de celular…");',
+                       'showModeReloadScreenNow();updateModeTransition(10,"Conectando ao servidor","Validando acesso e sincronizando o catálogo completo…");',
+                       'texto inicial troca de modo')
+          must_replace('updateModeTransition(24,"Interface ajustada","Sincronizando filmes, séries, canais, capas, logos e EPG…");',
+                       'updateModeTransition(24,"Sincronizando conteúdo","Preparando filmes, séries, canais, capas, logos e EPG…");',
+                       'etapa 24 troca de modo')
+          must_replace('updateModeTransition(42,"Catálogo sincronizado","Preparando as capas e informações que aparecem primeiro…");',
+                       'updateModeTransition(42,"Filmes e séries sincronizados","Preparando capas, detalhes e canais…");',
+                       'etapa 42 troca de modo')
+          must_replace('updateModeTransition(88,"Conteúdo preparado","Finalizando interface, logos e programação…");',
+                       'updateModeTransition(88,"Preparando logos e EPG","Finalizando logos dos canais e programação…");',
+                       'etapa 88 troca de modo')
+          must_replace('updateModeTransition(18,"Tela ajustada","Mantendo o conteúdo pronto enquanto a interface muda…");',
+                       'updateModeTransition(18,"Sincronizando conteúdo","Preparando filmes, séries, canais, capas, logos e EPG…");',
+                       'remove Tela ajustada')
+
+          # Normal loading uses exactly the same title and allows long status/detail text to wrap.
+          must_replace('TextView title=t(modeReloadScreen?"Atualizando sua experiência":"Preparando sua experiência",24);',
+                       'TextView title=t("Preparando sua experiência",24);','título loading normal')
+          old_detail='TextView detail=t("Preparando catálogo e serviços…",tvMode?13:12);detail.setTextColor(0xffa6b0ab);detail.setGravity(Gravity.CENTER);detail.setPadding(dp(18),0,dp(18),0);panel.addView(detail,new LinearLayout.LayoutParams(-1,dp(34)));'
+          new_detail='TextView detail=t("Preparando catálogo e serviços…",tvMode?13:12);detail.setTextColor(0xffa6b0ab);detail.setGravity(Gravity.CENTER);detail.setMaxLines(2);detail.setEllipsize(android.text.TextUtils.TruncateAt.END);detail.setLineSpacing(0,1.08f);detail.setPadding(dp(18),dp(2),dp(18),dp(2));LinearLayout.LayoutParams detailLp=new LinearLayout.LayoutParams(-1,-2);detailLp.setMargins(0,0,0,dp(2));panel.addView(detail,detailLp);'
+          must_replace(old_detail,new_detail,'loading sem texto cortado')
+
+          # TV catalog must live in a fixed host: categories and poster grid scroll independently.
+          old_open='''void openTvCatalogBrowser(int typeId,String title,boolean kidsOnly){
+  if(!tvMode){homeTab(title);return;}if(detailOpen)closeDetails();if(currentNavIndex==2&&tvPageRoot!=null){releaseTvInlinePlayer();createTransientPageHost();}else if(currentNavIndex==0&&mainScroll==homeScrollCache)leaveHomeForPage();else if(mainScroll==null||body==null)createTransientPageHost();
+  activeHomeTab=title;clear();setNav(0);standardRootInsets();syncTvHeader(title);body.setPadding(0,0,0,0);'''
+          new_open='''void openTvCatalogBrowser(int typeId,String title,boolean kidsOnly){
+  if(!tvMode){homeTab(title);return;}if(detailOpen)closeDetails();try{releaseTvInlinePlayer();}catch(Exception ignored){}createTvPageHost();
+  activeHomeTab=title;clear();setNav(0);standardRootInsets();syncTvHeader(title);body.setPadding(0,0,0,0);'''
+          must_replace(old_open,new_open,'host fixo catálogo TV')
+
+          must_replace('ScrollView catScroll=new ScrollView(this);catScroll.setVerticalScrollBarEnabled(false);LinearLayout catHost=new LinearLayout(this);',
+                       'ScrollView catScroll=new ScrollView(this);catScroll.setFillViewport(true);catScroll.setVerticalScrollBarEnabled(false);catScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);LinearLayout catHost=new LinearLayout(this);',
+                       'scroll categorias independente')
+          must_replace('side.addView(catScroll,new LinearLayout.LayoutParams(-1,0,1));\n  ScrollView gridScroll=new ScrollView(this);gridScroll.setVerticalScrollBarEnabled(false);',
+                       'side.addView(catScroll,new LinearLayout.LayoutParams(-1,0,1));enableIndependentTvScroll(catScroll);\n  ScrollView gridScroll=new ScrollView(this);gridScroll.setFillViewport(false);gridScroll.setVerticalScrollBarEnabled(false);gridScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);',
+                       'scroll grid independente 1')
+          must_replace('gridScroll.addView(grid,new ScrollView.LayoutParams(-1,-2));split.addView(gridScroll,new LinearLayout.LayoutParams(0,-1,1));',
+                       'gridScroll.addView(grid,new ScrollView.LayoutParams(-1,-2));split.addView(gridScroll,new LinearLayout.LayoutParams(0,-1,1));enableIndependentTvScroll(gridScroll);',
+                       'scroll grid independente 2')
+
+          old_available='int sideW=tvCatalogSideWidthPx();int available=grid.getWidth()>dp(300)?grid.getWidth()-grid.getPaddingLeft()-grid.getPaddingRight():Math.max(dp(720),getResources().getDisplayMetrics().widthPixels-sideW-dp(18));'
+          new_available='int sideW=tvCatalogSideWidthPx();int measured=grid.getWidth()>dp(300)?grid.getWidth():getResources().getDisplayMetrics().widthPixels-sideW;int available=Math.max(dp(480),measured-grid.getPaddingLeft()-grid.getPaddingRight()-dp(4));'
+          must_replace(old_available,new_available,'grid usa toda largura')
+
+          # Mobile Favorites / Downloads chips centered and equal width.
+          old_chips='LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER);String[] names={"Filmes","Séries","TV"};for(String n:names){TextView c=t(n,11);c.setGravity(Gravity.CENTER);c.setTextColor(0xffcfe5d7);GradientDrawable cg=round(0xff12271c,16);cg.setStroke(dp(1),0xff315842);c.setBackground(cg);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(78),dp(32));cp.setMargins(dp(3),0,dp(3),dp(14));chips.addView(c,cp);}box.addView(chips,new LinearLayout.LayoutParams(-1,-2));'
+          new_chips='LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER);chips.setOrientation(LinearLayout.HORIZONTAL);String[] names={"Filmes","Séries","TV"};for(String n:names){TextView c=t(n,11);c.setGravity(Gravity.CENTER);c.setTextColor(0xffcfe5d7);GradientDrawable cg=round(0xff12271c,16);cg.setStroke(dp(1),0xff315842);c.setBackground(cg);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(34),1);cp.setMargins(dp(4),0,dp(4),0);chips.addView(c,cp);}LinearLayout.LayoutParams chipsLp=new LinearLayout.LayoutParams(-1,-2);chipsLp.setMargins(dp(34),0,dp(34),dp(14));box.addView(chips,chipsLp);'
+          must_replace(old_chips,new_chips,'chips Favoritos Downloads centralizados')
+
+          # Avoid the temporary black side while TV cinema expands: force several full-layout passes.
+          new_enter=r'''
+ void enterTvCinemaMode(){
+  if(!wideTvUi()||currentNavIndex!=2||tvInlineFullscreen||tvPreviewFrame==null)return;
+  tvCinemaMode=true;tvCinemaDrawerOpen=false;
+  if(navBar!=null)navBar.setVisibility(View.GONE);
+  if(body!=null)body.setPadding(0,body.getPaddingTop(),0,body.getPaddingBottom());
+  if(tvInlinePlayerView!=null){tvInlinePlayerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL);tvInlinePlayerView.setScaleX(1f);tvInlinePlayerView.setScaleY(1f);tvInlinePlayerView.setLayoutParams(new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER));}
+  if(tvWideLeftPanel!=null)tvWideLeftPanel.setVisibility(View.GONE);
+  if(tvWideSplit!=null){ViewGroup.LayoutParams raw=tvWideSplit.getLayoutParams();if(raw instanceof LinearLayout.LayoutParams){LinearLayout.LayoutParams lp=(LinearLayout.LayoutParams)raw;lp.setMargins(0,0,0,0);tvWideSplit.setLayoutParams(lp);}tvWideSplit.requestLayout();tvWideSplit.forceLayout();}
+  if(tvPreviewFrame!=null){ViewGroup.LayoutParams raw=tvPreviewFrame.getLayoutParams();if(raw instanceof FrameLayout.LayoutParams){FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)raw;lp.width=-1;lp.height=-1;lp.setMargins(0,0,0,0);tvPreviewFrame.setLayoutParams(lp);}tvPreviewFrame.requestLayout();tvPreviewFrame.forceLayout();}
+  Runnable fill=()->{if(tvCinemaMode&&!tvCinemaDrawerOpen&&tvPreviewFrame!=null){try{if(tvWideSplit!=null)tvWideSplit.requestLayout();tvPreviewFrame.requestLayout();applyTvSafeSideFill(tvVideoWidth,tvVideoHeight,tvVideoPixelRatio);}catch(Exception ignored){}}};
+  fill.run();if(tvInlineHandler!=null){tvInlineHandler.post(fill);tvInlineHandler.postDelayed(fill,32);tvInlineHandler.postDelayed(fill,96);tvInlineHandler.postDelayed(fill,220);}
+  requestTvFocus(tvPreviewFrame);showTvEpgOverlayTemporarily();
+ }'''
+          replace_method('void enterTvCinemaMode(){','void showTvChannelDrawer(){',new_enter,'TV sem lateral preta ao entrar cinema')
+
+          new_hide=r'''
+ void hideTvChannelDrawer(){
+  if(!tvCinemaMode)return;tvCinemaDrawerOpen=false;if(tvWideLeftPanel!=null)tvWideLeftPanel.setVisibility(View.GONE);
+  if(tvWideSplit!=null){tvWideSplit.requestLayout();tvWideSplit.forceLayout();}
+  Runnable fill=()->{if(tvCinemaMode&&!tvCinemaDrawerOpen&&tvPreviewFrame!=null){try{tvPreviewFrame.requestLayout();applyTvSafeSideFill(tvVideoWidth,tvVideoHeight,tvVideoPixelRatio);}catch(Exception ignored){}}};
+  fill.run();if(tvInlineHandler!=null){tvInlineHandler.post(fill);tvInlineHandler.postDelayed(fill,48);tvInlineHandler.postDelayed(fill,140);}
+  if(tvPreviewFrame!=null)requestTvFocus(tvPreviewFrame);showTvEpgOverlayTemporarily();
+ }'''
+          replace_method('void hideTvChannelDrawer(){','void exitTvCinemaMode(){',new_hide,'TV sem lateral preta ao fechar lista')
+
+          must_replace('tvInlinePlayerView.setBackgroundColor(Color.BLACK);if(tvPreviewFrame.getParent() instanceof ViewGroup)',
+                       'tvInlinePlayerView.setBackgroundColor(Color.BLACK);tvInlinePlayerView.requestLayout();tvPreviewFrame.requestLayout();if(tvPreviewFrame.getParent() instanceof ViewGroup)',
+                       'força relayout do vídeo')
+
+          main.write_text(s,encoding='utf-8')
+
+          # Version metadata.
+          g=gradle.read_text(encoding='utf-8')
+          if "versionCode 231" not in g or "versionName '1.16.220.0'" not in g:
+              raise SystemExit('Versão esperada v16.220 não encontrada no build.gradle')
+          g=g.replace('versionCode 231','versionCode 232').replace("versionName '1.16.220.0'","versionName '1.16.221.0'")
+          gradle.write_text(g,encoding='utf-8')
+
+          readme=project/'README_V16_221_CORRECOES_FINAIS_TV_LOADING_LAYOUT.txt'
+          readme.write_text("""GreenPlay v16.221 — correções finais solicitadas
+
+- Loading único no início e na troca celular/TV, sem a tela "Tela ajustada".
+- Loading deixa textos longos de logos/EPG quebrarem linha sem cortar.
+- Filmes/Séries/Kids na TV usam host fixo: categorias permanecem à esquerda e rolam separadamente do grid.
+- Grid da TV calcula a largura útil real para evitar espaço vazio desnecessário à direita.
+- Favoritos e Downloads: chips Filmes/Séries/TV centralizados e com larguras iguais.
+- Player TV: relayout imediato e repetido ao entrar no modo cinema/fechar a lista para eliminar lateral preta transitória.
+- Menu superior TV/Destaque/Filmes/Séries/Favoritos aumentado levemente.
+- Mantidas as correções anteriores de foco/controle remoto, EPG, logos, ANR e navegação.
+""",encoding='utf-8')
+
+          print('Projeto:',project)
+          print('MainActivity:',main)
+          PY
+
+          # Preserve the original ZIP structure, including gp_v16220/ top folder.
+          (cd work && zip -qr "../releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip" .)
+          ls -lh releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+
+      - name: Commit final source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/GreenPlay_Android_Nativo_v16_221_CORRECOES_FINAIS.zip
+          git commit -m "GreenPlay v16.221 final fixes" || exit 0
+          git push
