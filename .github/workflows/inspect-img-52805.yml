@@ -1,0 +1,28 @@
+name: Inspect Img 52805
+on:
+  push:
+    paths:
+      - .github/workflows/inspect-img-52805.yml
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/gp52805
+          mkdir -p /tmp/gp52805 inspection/latest52805
+          unzip -q uploads/project-20260921-123651-7e8342.zip -d /tmp/gp52805
+          IMG="$(find /tmp/gp52805 -type f -path '*/app/src/main/java/fun/greenplay/app/Img.java' | head -n1)"
+          test -n "$IMG"
+          cp "$IMG" inspection/latest52805/Img.java
+      - shell: bash
+        run: |
+          git config user.name "GreenPlay Inspector"
+          git config user.email "actions@users.noreply.github.com"
+          git add inspection/latest52805/Img.java
+          git commit -m "Inspect Img.java from GreenPlay 5.28.5" || exit 0
+          git push
