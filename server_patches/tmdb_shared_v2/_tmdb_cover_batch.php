@@ -1,5 +1,5 @@
 <?php
-/* GREENPLAY TMDB COVER ON-DEMAND V2.6
+/* GREENPLAY TMDB COVER ON-DEMAND V2.7
  * TMDB-only + cache compartilhado entre provedores.
  * Busca resiliente para nomes de listas IPTV:
  * - remove marcadores técnicos/numeração
@@ -201,7 +201,7 @@ function gp_tmdb_cover_pick($json,$title,$year,$type,$queryUsed=''){
     $wantYear=gp_tmdb_year($year);
     $best=null;$bestScore=-1;$bestYear='';
     foreach(array_slice($rows,0,12) as $i=>$r){
-        if(!is_array($r)||empty($r['poster_path']))continue;
+        if(!is_array($r)||(empty($r['poster_path'])&&empty($r['backdrop_path'])))continue;
         $t=$type==='series'?(string)($r['name']??''):(string)($r['title']??'');
         $o=$type==='series'?(string)($r['original_name']??''):(string)($r['original_title']??'');
         $date=$type==='series'?(string)($r['first_air_date']??''):(string)($r['release_date']??'');
@@ -242,7 +242,7 @@ function gp_tmdb_cover_pick($json,$title,$year,$type,$queryUsed=''){
     if($bestScore>=94)return $best;
 
     // Resultado único: aceitar apenas em cenários relativamente seguros.
-    $usable=array_values(array_filter($rows,function($r){return is_array($r)&&!empty($r['poster_path']);}));
+    $usable=array_values(array_filter($rows,function($r){return is_array($r)&&(!empty($r['poster_path'])||!empty($r['backdrop_path']));}));
     if(count($usable)===1){
         if($wantYear!=='' && $bestYear!=='' && $wantYear===$bestYear)return $best;
         if($wantYear===''){
@@ -290,8 +290,17 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
         if(preg_match('/(?:^|\s)\[?XXX\]?|\[Adulto\]/iu',$title)){$failed++;continue;}
 
         $existing=gp_tmdb_content_cache_get($type,$id);
-        if(is_array($existing)&&!empty($existing['tmdb_id'])&&!empty($existing['poster'])){
-            $cached++;gp_tmdb_shared_set($type,$title,$year,$existing);continue;
+        if(is_array($existing)&&!empty($existing['tmdb_id'])){
+            if(empty($existing['poster'])&&!empty($existing['backdrop'])){
+                // TMDB pode ter backdrop sem poster. Para o card, use a própria imagem TMDB
+                // como fallback em vez de deixar o bloco vazio.
+                $existing['poster']=$existing['backdrop'];
+                $existing['cover_cache_version']=7;
+                gp_tmdb_content_cache_set($type,$id,$existing);
+            }
+            if(!empty($existing['poster'])){
+                $cached++;gp_tmdb_shared_set($type,$title,$year,$existing);continue;
+            }
         }
 
         $reuse=gp_tmdb_shared_get($type,$title,$year);
@@ -339,7 +348,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     CURLOPT_SSL_VERIFYPEER=>true,
                     CURLOPT_SSL_VERIFYHOST=>2,
                     CURLOPT_HTTPHEADER=>$headers,
-                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.6'
+                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.7'
                 ));
                 curl_multi_add_handle($mh,$ch);
                 $handles[$id]=array('ch'=>$ch,'query'=>$query);
@@ -365,12 +374,12 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     $release=$type==='series'?(string)($pick['first_air_date']??''):(string)($pick['release_date']??'');
                     $data=array(
                         'cache_version'=>4,
-                        'cover_cache_version'=>6,
+                        'cover_cache_version'=>7,
                         'tmdb_id'=>(int)($pick['id']??0),
                         'title'=>$type==='series'?(string)($pick['name']??$job['title']):(string)($pick['title']??$job['title']),
                         'original_title'=>$type==='series'?(string)($pick['original_name']??''):(string)($pick['original_title']??''),
-                        'poster'=>gp_tmdb_img($pick['poster_path']??'','w500'),
-                        'backdrop'=>gp_tmdb_img($pick['backdrop_path']??'','w1280'),
+                        'poster'=>gp_tmdb_img(!empty($pick['poster_path'])?$pick['poster_path']:($pick['backdrop_path']??''),'w500'),
+                        'backdrop'=>gp_tmdb_img($pick['backdrop_path']??($pick['poster_path']??''),'w1280'),
                         'overview'=>(string)($pick['overview']??''),
                         'release_date'=>$release,
                         'year'=>gp_tmdb_year($release),
