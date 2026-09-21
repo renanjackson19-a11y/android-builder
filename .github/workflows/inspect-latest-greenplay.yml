@@ -17,7 +17,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="uploads/project-20260921-124833-d90691.zip"
+          ZIP="uploads/project-20260921-123651-7e8342.zip"
           rm -rf /tmp/gp-latest inspection/latest52805
           mkdir -p /tmp/gp-latest inspection/latest52805
           unzip -q "$ZIP" -d /tmp/gp-latest
