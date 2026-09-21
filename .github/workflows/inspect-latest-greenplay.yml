@@ -1,0 +1,45 @@
+name: Inspect latest GreenPlay source
+
+on:
+  push:
+    paths:
+      - .github/workflows/inspect-latest-greenplay.yml
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack latest uploaded source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="uploads/project-20260921-124833-d90691.zip"
+          rm -rf /tmp/gp-latest inspection/latest52805
+          mkdir -p /tmp/gp-latest inspection/latest52805
+          unzip -q "$ZIP" -d /tmp/gp-latest
+          MAIN="$(find /tmp/gp-latest -type f -path '*/app/src/main/java/fun/greenplay/app/MainActivity.java' | head -n1)"
+          API="$(find /tmp/gp-latest -type f -path '*/app/src/main/java/fun/greenplay/app/Api.java' | head -n1)"
+          GRADLE="$(find /tmp/gp-latest -type f -path '*/app/build.gradle' | head -n1)"
+          test -n "$MAIN" && test -n "$API" && test -n "$GRADLE"
+          cp "$MAIN" inspection/latest52805/MainActivity.java
+          cp "$API" inspection/latest52805/Api.java
+          cp "$GRADLE" inspection/latest52805/build.gradle
+          {
+            echo "SOURCE_ZIP=$ZIP"
+            grep -nE 'versionCode|versionName' "$GRADLE" || true
+            echo
+            echo "=== TMDB / image / snapshot references ==="
+            grep -nEi 'tmdb|thumbnail|portrait_img|landscape|bootstrap_home|content_by_category|section_list|get_category' "$MAIN" | head -n 500 || true
+          } > inspection/latest52805/REPORT.txt
+      - name: Commit inspection
+        shell: bash
+        run: |
+          git config user.name "GreenPlay Inspector"
+          git config user.email "actions@users.noreply.github.com"
+          git add inspection/latest52805
+          git commit -m "Inspect GreenPlay 5.28.5 source" || exit 0
+          git push
