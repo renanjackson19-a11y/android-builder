@@ -1,5 +1,5 @@
 <?php
-/* GREENPLAY TMDB COVER ON-DEMAND V2.7
+/* GREENPLAY TMDB COVER ON-DEMAND V2.8
  * TMDB-only + cache compartilhado entre provedores.
  * Busca resiliente para nomes de listas IPTV:
  * - remove marcadores técnicos/numeração
@@ -77,8 +77,13 @@ function gp_tmdb_shared_get($type,$title,$year=''){
         if($clean!=='' && gp_tmdb_cover_norm($clean)!==gp_tmdb_cover_norm($title))$titles[]=$clean;
     }
     foreach(array_unique($titles) as $tt){
-        $f=gp_tmdb_shared_file($type,$tt,$year);if($f!=='')$files[]=$f;
-        if($yr!==''){$g=gp_tmdb_shared_file($type,$tt,'');if($g!=='')$files[]=$g;}
+        if($yr!==''){
+            $f=gp_tmdb_shared_file($type,$tt,$yr);
+            if($f!=='')$files[]=$f;
+        }else{
+            $f=gp_tmdb_shared_file($type,$tt,'');
+            if($f!=='')$files[]=$f;
+        }
     }
     $files=array_values(array_unique($files));
     foreach($files as $path){
@@ -105,9 +110,10 @@ function gp_tmdb_shared_set($type,$title,$year,$data){
         if($clean!=='' && gp_tmdb_cover_norm($clean)!==gp_tmdb_cover_norm($title))$titles[]=$clean;
     }
     $targets=array();
+    $yr=function_exists('gp_tmdb_year')?gp_tmdb_year($year):'';
     foreach(array_unique($titles) as $tt){
-        $targets[]=gp_tmdb_shared_file($type,$tt,$year);
-        $targets[]=gp_tmdb_shared_file($type,$tt,'');
+        if($yr!=='')$targets[]=gp_tmdb_shared_file($type,$tt,$yr);
+        else $targets[]=gp_tmdb_shared_file($type,$tt,'');
     }
     $targets=array_filter(array_unique($targets));
     $ok=false;$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
@@ -154,43 +160,23 @@ function gp_tmdb_cover_candidates($title,$year=''){
     };
     $add($base);
 
-    // Títulos de doramas/novelas costumam trazer tradução + nome original separados por hífen.
+    // Só tenta aliases completos separados por hífen; não corta palavras do título.
     $parts=preg_split('/\s+[-–—]\s+/u',$base);
     if(is_array($parts)&&count($parts)>1){
-        for($i=count($parts)-1;$i>=0;$i--){
-            $p=trim((string)$parts[$i]);
+        foreach($parts as $p){
+            $p=trim((string)$p);
             $words=preg_split('/\s+/u',$p,-1,PREG_SPLIT_NO_EMPTY);
             if(strlen(gp_tmdb_cover_norm($p))>=5 && count($words)<=10)$add($p);
         }
     }
 
-    $yr=function_exists('gp_tmdb_year')?gp_tmdb_year($year):'';
-    $words=preg_split('/\s+/u',$base,-1,PREG_SPLIT_NO_EMPTY);
-    $cnt=count($words);
-
-    // Variante sem a conjunção "e": ajuda nomes como "Law e Order Crime Organizado".
-    if($cnt>=3){
-        $noE=preg_replace('/\s+e\s+/iu',' ',$base);
+    // Variante controlada para listas em português que trocam "and" por "e".
+    if(preg_match('/\s+e\s+/iu',$base)){
+        $noE=preg_replace('/\s+e\s+/iu',' and ',$base);
         if($noE!==$base)$add($noE);
     }
 
-    // Tenta prefixos e sufixos úteis mesmo sem ano.
-    foreach(array(5,4,3,2) as $n){
-        if($cnt>$n){
-            $first=implode(' ',array_slice($words,0,$n));
-            $last=implode(' ',array_slice($words,-$n));
-            if(strlen(gp_tmdb_cover_norm($first))>=7)$add($first);
-            if(strlen(gp_tmdb_cover_norm($last))>=7)$add($last);
-        }
-    }
-
-    // Com ano conhecido podemos tentar também uma palavra distintiva.
-    if($yr!=='' && $cnt>1){
-        $one=(string)$words[0];
-        if(strlen(gp_tmdb_cover_norm($one))>=5)$add($one);
-    }
-
-    return array_slice($out,0,12);
+    return array_slice($out,0,5);
 }}
 
 if(!function_exists('gp_tmdb_cover_pick')){
@@ -199,58 +185,74 @@ function gp_tmdb_cover_pick($json,$title,$year,$type,$queryUsed=''){
     $full=gp_tmdb_cover_norm(gp_tmdb_cover_search_title($title));
     $query=gp_tmdb_cover_norm($queryUsed!==''?$queryUsed:$title);
     $wantYear=gp_tmdb_year($year);
-    $best=null;$bestScore=-1;$bestYear='';
+    $best=null;$bestScore=-1;$bestYear='';$bestExact=false;
+
     foreach(array_slice($rows,0,12) as $i=>$r){
         if(!is_array($r)||(empty($r['poster_path'])&&empty($r['backdrop_path'])))continue;
+
         $t=$type==='series'?(string)($r['name']??''):(string)($r['title']??'');
         $o=$type==='series'?(string)($r['original_name']??''):(string)($r['original_title']??'');
         $date=$type==='series'?(string)($r['first_air_date']??''):(string)($r['release_date']??'');
-        $names=array_values(array_filter(array_unique(array(gp_tmdb_cover_norm($t),gp_tmdb_cover_norm($o)))));
-        $score=0;
-        foreach($names as $n){
-            foreach(array($full,$query) as $want){
-                if($want===''||$n==='')continue;
-                if($n===$want){$score=max($score,220);continue;}
-                if(strpos($n,$want)!==false||strpos($want,$n)!==false){
-                    $score=max($score,$want===$full?150:92);
-                }
-                $pct=0;similar_text($want,$n,$pct);$score=max($score,$pct);
-            }
-        }
-        $cy=gp_tmdb_year($date);
-        if($wantYear!==''){
-            if($cy===''){
-                // Sem ano no resultado, não aceite match frouxo quando a fonte tem ano.
-                // Só um match textual exato do título completo pode sobreviver.
-                $exactFull=false;
-                foreach($names as $n){if($full!==''&&$n===$full){$exactFull=true;break;}}
-                if(!$exactFull)continue;
-            }else{
-                $diff=abs((int)$wantYear-(int)$cy);
-                // Segurança: com ano conhecido, não aceitar obra de época diferente.
-                // Tolerância de 3 anos cobre lançamentos regionais tardios.
-                if($diff>3)continue;
-                if($diff===0)$score+=40;
-                elseif($diff===1)$score+=18;
-                else $score+=5;
-            }
-        }
-        $score+=max(0,6-(int)$i);
-        if($score>$bestScore){$bestScore=$score;$best=$r;$bestYear=$cy;}
-    }
-    if(!$best)return null;
-    if($bestScore>=94)return $best;
 
-    // Resultado único: aceitar apenas em cenários relativamente seguros.
-    $usable=array_values(array_filter($rows,function($r){return is_array($r)&&(!empty($r['poster_path'])||!empty($r['backdrop_path']));}));
-    if(count($usable)===1){
-        if($wantYear!=='' && $bestYear!=='' && $wantYear===$bestYear)return $best;
-        if($wantYear===''){
-            $words=preg_split('/\s+/u',$query,-1,PREG_SPLIT_NO_EMPTY);
-            $maxLen=0;foreach($words as $w)$maxLen=max($maxLen,strlen($w));
-            if(count($words)>=3 || $maxLen>=10)return $best;
+        $names=array_values(array_filter(array_unique(array(
+            gp_tmdb_cover_norm($t),
+            gp_tmdb_cover_norm($o)
+        ))));
+
+        $score=0;$exact=false;
+
+        foreach($names as $n){
+            if($n==='')continue;
+
+            if($full!=='' && $n===$full){
+                $score=max($score,240);$exact=true;continue;
+            }
+
+            if($query!=='' && $n===$query){
+                $score=max($score,225);$exact=true;continue;
+            }
+
+            $pctFull=0;$pctQuery=0;
+            if($full!=='')similar_text($full,$n,$pctFull);
+            if($query!=='')similar_text($query,$n,$pctQuery);
+            $pct=max($pctFull,$pctQuery);
+
+            // Match parcial só conta se ainda for muito parecido.
+            if($pct>=88)$score=max($score,$pct);
+        }
+
+        $cy=gp_tmdb_year($date);
+
+        if($wantYear!==''){
+            if($cy==='')continue;
+            $diff=abs((int)$wantYear-(int)$cy);
+            if($diff>2)continue;
+            if($diff===0)$score+=45;
+            elseif($diff===1)$score+=18;
+            else $score+=6;
+        }
+
+        $score+=max(0,5-(int)$i);
+
+        if($score>$bestScore){
+            $bestScore=$score;
+            $best=$r;
+            $bestYear=$cy;
+            $bestExact=$exact;
         }
     }
+
+    if(!$best)return null;
+
+    // Sem ano, só aceita título exato ou similaridade realmente alta.
+    if($wantYear===''){
+        if($bestExact || $bestScore>=92)return $best;
+        return null;
+    }
+
+    // Com ano, ainda exige título forte.
+    if($bestExact || $bestScore>=120)return $best;
+
     return null;
 }}
 
@@ -348,7 +350,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     CURLOPT_SSL_VERIFYPEER=>true,
                     CURLOPT_SSL_VERIFYHOST=>2,
                     CURLOPT_HTTPHEADER=>$headers,
-                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.7'
+                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.8'
                 ));
                 curl_multi_add_handle($mh,$ch);
                 $handles[$id]=array('ch'=>$ch,'query'=>$query);
@@ -374,7 +376,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     $release=$type==='series'?(string)($pick['first_air_date']??''):(string)($pick['release_date']??'');
                     $data=array(
                         'cache_version'=>4,
-                        'cover_cache_version'=>7,
+                        'cover_cache_version'=>8,
                         'tmdb_id'=>(int)($pick['id']??0),
                         'title'=>$type==='series'?(string)($pick['name']??$job['title']):(string)($pick['title']??$job['title']),
                         'original_title'=>$type==='series'?(string)($pick['original_name']??''):(string)($pick['original_title']??''),
