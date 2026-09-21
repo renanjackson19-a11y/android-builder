@@ -117,12 +117,29 @@ function gp_tmdb_cover_pick($json,$title,$year,$type){
     return $best;
 }}
 
+if(!function_exists('gp_tmdb_cover_search_title')){
+function gp_tmdb_cover_search_title($title){
+    $q=trim((string)$title);
+    if(function_exists('gp_tmdb_clean_title')){
+        $x=trim((string)gp_tmdb_clean_title($q));
+        if($x!=='')$q=$x;
+    }
+    $q=preg_replace('/[\\[\\(\\{][^\\]\\)\\}]{0,40}(?:dublad[oa]|legendad[oa]|dual(?: audio)?|pt[- ]?br|portugu[eê]s|4k|2160p|1080p|720p|480p|fhd|uhd|hdr10?|dolby|web[- .]?dl|web[- .]?rip|blu[- .]?ray|bluray|bdrip|dvdrip|h\\.?26[45]|hevc|x26[45]|aac|ac3|eac3)[^\\]\\)\\}]{0,40}[\\]\\)\\}]/iu',' ',$q);
+    $q=preg_replace('/\\b(?:dublad[oa]|legendad[oa]|dual(?:\\s+audio)?|pt[- ]?br|4k|2160p|1080p|720p|480p|fhd|uhd|hdr10?|web[- .]?dl|web[- .]?rip|blu[- .]?ray|bluray|bdrip|dvdrip|h\\.?26[45]|hevc|x26[45]|aac|ac3|eac3)\\b/iu',' ',$q);
+    $q=preg_replace('/\\bS\\d{1,2}\\s*E\\d{1,3}\\b/iu',' ',$q);
+    $q=preg_replace('/\\b(?:temporada|season)\\s*\\d{1,2}\\b/iu',' ',$q);
+    $q=preg_replace('/^[\\s\\-–—_|:]+|[\\s\\-–—_|:]+$/u','',$q);
+    $q=preg_replace('/\\s{2,}/u',' ',$q);
+    return trim($q);
+}}
+
 if(!function_exists('gp_tmdb_cover_search_url')){
 function gp_tmdb_cover_search_url($job,$type,$cfg,&$headers){
     $searchType=$type==='series'?'tv':'movie';
-    $params=array('language'=>(string)($cfg['language']??'pt-BR'),'query'=>$job['title'],'include_adult'=>'false');
+    $query=gp_tmdb_cover_search_title($job['title']);if($query==='')$query=trim((string)$job['title']);
+    $params=array('language'=>(string)($cfg['language']??'pt-BR'),'query'=>$query,'include_adult'=>'false');
     $region=(string)($cfg['region']??'BR');if($region!=='')$params['region']=$region;
-    $yr=gp_tmdb_year($job['year']);if($yr!==''){$params[$type==='series'?'first_air_date_year':'year']=$yr;}
+    $yr=gp_tmdb_year($job['year']); // ano fica no score; nao restringe a busca
     $token=(string)$cfg['token'];$mode=(string)($cfg['auth_mode']??'auto');if($mode==='auto')$mode=gp_tmdb_credential_mode($token);
     $headers=array('Accept: application/json','Connection: close');
     if($mode==='api_key_v3')$params['api_key']=$token;else $headers[]='Authorization: Bearer '.$token;
@@ -146,11 +163,11 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
         $jobs[]=array('id'=>$id,'title'=>$title,'year'=>$year);
     }
     if(!$jobs)return array('requested'=>0,'shared'=>$shared,'cached'=>$cached,'matched'=>0,'failed'=>0);
-    foreach(array_chunk($jobs,12) as $chunk){
+    foreach(array_chunk($jobs,4) as $chunk){
         $mh=curl_multi_init();$handles=array();
         foreach($chunk as $i=>$job){
             $headers=array();$url=gp_tmdb_cover_search_url($job,$type,$cfg,$headers);$ch=curl_init();
-            curl_setopt_array($ch,array(CURLOPT_URL=>$url,CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>$headers,CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.1'));
+            curl_setopt_array($ch,array(CURLOPT_URL=>$url,CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>$headers,CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.3'));
             curl_multi_add_handle($mh,$ch);$handles[$i]=array('ch'=>$ch,'job'=>$job);$requested++;
         }
         $running=null;do{$mrc=curl_multi_exec($mh,$running);if($running){$n=curl_multi_select($mh,0.25);if($n===-1)usleep(50000);}}while($running&&$mrc===CURLM_OK);
@@ -166,7 +183,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
             }else $failed++;
             curl_multi_remove_handle($mh,$ch);curl_close($ch);
         }
-        curl_multi_close($mh);usleep(60000);
+        curl_multi_close($mh);usleep(280000);
     }
     return array('requested'=>$requested,'shared'=>$shared,'cached'=>$cached,'matched'=>$matched,'failed'=>$failed);
 }}
