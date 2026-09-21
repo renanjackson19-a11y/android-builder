@@ -1,5 +1,5 @@
 <?php
-/* GREENPLAY TMDB COVER ON-DEMAND V2.5
+/* GREENPLAY TMDB COVER ON-DEMAND V2.5.1
  * TMDB-only + cache compartilhado entre provedores.
  * Busca resiliente para nomes de listas IPTV:
  * - remove marcadores técnicos/numeração
@@ -77,9 +77,11 @@ function gp_tmdb_shared_get($type,$title,$year=''){
         if(!is_file($path))continue;
         $j=json_decode(@file_get_contents($path),true);
         if(!is_array($j)||empty($j['tmdb_id'])||empty($j['poster']))continue;
-        if($yr!==''&&!empty($j['release_date'])){
-            $cy=gp_tmdb_year((string)$j['release_date']);
-            if($cy!==''&&abs((int)$cy-(int)$yr)>1)continue;
+        if($yr!==''){
+            $cy=gp_tmdb_year((string)($j['year']??($j['release_date']??'')));
+            // Com ano conhecido na fonte, cache compartilhado sem ano não é confiável.
+            // Também rejeita obra de época distante; tolerância de 3 anos cobre lançamentos regionais.
+            if($cy===''||abs((int)$cy-(int)$yr)>3)continue;
         }
         return $j;
     }
@@ -185,14 +187,22 @@ function gp_tmdb_cover_pick($json,$title,$year,$type,$queryUsed=''){
             }
         }
         $cy=gp_tmdb_year($date);
-        if($wantYear!==''&&$cy!==''){
-            $diff=abs((int)$wantYear-(int)$cy);
-            // Segurança: com ano conhecido, não aceitar obra de época diferente.
-            // Tolerância de 3 anos cobre lançamentos regionais tardios (ex.: filmes asiáticos no Brasil).
-            if($diff>3)continue;
-            if($diff===0)$score+=40;
-            elseif($diff===1)$score+=18;
-            else $score+=5;
+        if($wantYear!==''){
+            if($cy===''){
+                // Sem ano no resultado, não aceite match frouxo quando a fonte tem ano.
+                // Só um match textual exato do título completo pode sobreviver.
+                $exactFull=false;
+                foreach($names as $n){if($full!==''&&$n===$full){$exactFull=true;break;}}
+                if(!$exactFull)continue;
+            }else{
+                $diff=abs((int)$wantYear-(int)$cy);
+                // Segurança: com ano conhecido, não aceitar obra de época diferente.
+                // Tolerância de 3 anos cobre lançamentos regionais tardios.
+                if($diff>3)continue;
+                if($diff===0)$score+=40;
+                elseif($diff===1)$score+=18;
+                else $score+=5;
+            }
         }
         $score+=max(0,6-(int)$i);
         if($score>$bestScore){$bestScore=$score;$best=$r;$bestYear=$cy;}
@@ -298,7 +308,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     CURLOPT_SSL_VERIFYPEER=>true,
                     CURLOPT_SSL_VERIFYHOST=>2,
                     CURLOPT_HTTPHEADER=>$headers,
-                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.5'
+                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.5.1'
                 ));
                 curl_multi_add_handle($mh,$ch);
                 $handles[$id]=array('ch'=>$ch,'query'=>$query);
@@ -324,7 +334,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     $release=$type==='series'?(string)($pick['first_air_date']??''):(string)($pick['release_date']??'');
                     $data=array(
                         'cache_version'=>4,
-                        'cover_cache_version'=>4,
+                        'cover_cache_version'=>5,
                         'tmdb_id'=>(int)($pick['id']??0),
                         'title'=>$type==='series'?(string)($pick['name']??$job['title']):(string)($pick['title']??$job['title']),
                         'original_title'=>$type==='series'?(string)($pick['original_name']??''):(string)($pick['original_title']??''),
