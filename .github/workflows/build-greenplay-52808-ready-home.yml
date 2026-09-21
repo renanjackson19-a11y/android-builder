@@ -1,0 +1,99 @@
+name: Build GreenPlay 5.28.8 Ready Home
+
+on:
+  push:
+    paths:
+      - .github/workflows/build-greenplay-52808-ready-home.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build_source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract 5.28.5
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/gp52808
+          mkdir -p /tmp/gp52808 releases
+          unzip -q uploads/project-20260921-123651-7e8342.zip -d /tmp/gp52808
+          MAIN="$(find /tmp/gp52808 -type f -path '*/app/src/main/java/fun/greenplay/app/MainActivity.java' | head -n1)"
+          IMG="$(find /tmp/gp52808 -type f -path '*/app/src/main/java/fun/greenplay/app/Img.java' | head -n1)"
+          GRADLE="$(find /tmp/gp52808 -type f -path '*/app/build.gradle' | head -n1)"
+          test -n "$MAIN"
+          test -n "$IMG"
+          test -n "$GRADLE"
+          echo "$MAIN" > /tmp/gp_main_path
+          echo "$IMG" > /tmp/gp_img_path
+          echo "$GRADLE" > /tmp/gp_gradle_path
+
+      - name: Apply 5.28.7 no-worker base
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/patch_greenplay_52807.py "$(cat /tmp/gp_main_path)" "$(cat /tmp/gp_gradle_path)"
+
+      - name: Apply 5.28.8 ready-home fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/patch_greenplay_52808_ready_home.py "$(cat /tmp/gp_main_path)" "$(cat /tmp/gp_img_path)" "$(cat /tmp/gp_gradle_path)"
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN="$(cat /tmp/gp_main_path)"
+          IMG="$(cat /tmp/gp_img_path)"
+          GRADLE="$(cat /tmp/gp_gradle_path)"
+          grep -n "versionCode 52808" "$GRADLE"
+          grep -n "versionName '5.28.8'" "$GRADLE"
+          grep -n 'catalog52808_' "$MAIN"
+          grep -n 'homeArtworkCoveragePct' "$MAIN"
+          grep -n 'homeArtworkCoveragePct(cache)<92' "$MAIN"
+          grep -n 'Math.min(96,critical.size()),7800' "$MAIN"
+          grep -n 'newFixedThreadPool(8,imageThreadFactory("gp-img-"))' "$IMG"
+          grep -n 'replace("/w200/","/w500/")' "$IMG"
+          if grep -n 'Api.post("content_enrich"' "$MAIN"; then exit 1; fi
+
+      - name: Compile Java
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE="$(cat /tmp/gp_gradle_path)"
+          PROJ="$(dirname "$(dirname "$GRADLE")")"
+          cd "$PROJ"
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew :app:assembleDebug --no-daemon -x lint
+          elif command -v gradle >/dev/null 2>&1; then
+            gradle :app:assembleDebug --no-daemon -x lint
+          else
+            echo "Gradle not installed; static validation only."
+          fi
+
+      - name: Package complete source
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/releases/GreenPlay_Android_Nativo_5_28_52808_HOME_CAPAS_PRONTAS.zip"
+          rm -f "$OUT"
+          cd /tmp/gp52808
+          zip -qr "$OUT" .
+          unzip -tq "$OUT"
+          ls -lh "$OUT"
+
+      - name: Commit release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git pull --rebase
+          git add releases/GreenPlay_Android_Nativo_5_28_52808_HOME_CAPAS_PRONTAS.zip
+          git commit -m "GreenPlay 5.28.8 home covers ready before open" || exit 0
+          git push
