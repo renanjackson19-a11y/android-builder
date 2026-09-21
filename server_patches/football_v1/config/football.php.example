@@ -1,0 +1,7 @@
+<?php
+return array(
+    'api_key' => 'COLE_SUA_CHAVE_AQUI',
+    'timezone' => 'America/Sao_Paulo',
+    'today_ttl' => 1200,
+    'other_ttl' => 21600,
+);
