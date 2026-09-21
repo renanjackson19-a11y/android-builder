@@ -1,0 +1,108 @@
+name: Build GreenPlay 5.28.8 APK Direct
+
+on:
+  push:
+    paths:
+      - .github/workflows/build-greenplay-52808-apk-direct.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build_apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract exact 5.28.5 base
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/gp52808apk
+          mkdir -p /tmp/gp52808apk releases
+          unzip -q uploads/project-20260921-123651-7e8342.zip -d /tmp/gp52808apk
+          MAIN="$(find /tmp/gp52808apk -type f -path '*/app/src/main/java/fun/greenplay/app/MainActivity.java' | head -n1)"
+          IMG="$(find /tmp/gp52808apk -type f -path '*/app/src/main/java/fun/greenplay/app/Img.java' | head -n1)"
+          GRADLE="$(find /tmp/gp52808apk -type f -path '*/app/build.gradle' | head -n1)"
+          test -n "$MAIN"
+          test -n "$IMG"
+          test -n "$GRADLE"
+          echo "$MAIN" > /tmp/gp_main_path
+          echo "$IMG" > /tmp/gp_img_path
+          echo "$GRADLE" > /tmp/gp_gradle_path
+
+      - name: Apply 5.28.7 no-worker base
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/patch_greenplay_52807.py "$(cat /tmp/gp_main_path)" "$(cat /tmp/gp_gradle_path)"
+
+      - name: Apply 5.28.8 ready-home patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/patch_greenplay_52808_ready_home.py "$(cat /tmp/gp_main_path)" "$(cat /tmp/gp_img_path)" "$(cat /tmp/gp_gradle_path)"
+
+      - name: Sign release with stable project key
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE="$(cat /tmp/gp_gradle_path)"
+          python3 - "$GRADLE" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          s=p.read_text()
+          old="release { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' }"
+          new="release { signingConfig signingConfigs.stableDebug; minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' }"
+          if old not in s:
+              raise SystemExit("release buildType nao localizado")
+          p.write_text(s.replace(old,new,1))
+          PY
+
+      - name: Validate final source
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN="$(cat /tmp/gp_main_path)"
+          GRADLE="$(cat /tmp/gp_gradle_path)"
+          grep -n "versionCode 52808" "$GRADLE"
+          grep -n "versionName '5.28.8'" "$GRADLE"
+          grep -n "signingConfig signingConfigs.stableDebug" "$GRADLE"
+          grep -n "catalog52808_" "$MAIN"
+          if grep -n 'Api.post("content_enrich"' "$MAIN"; then exit 1; fi
+
+      - name: Build signed release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE="$(cat /tmp/gp_gradle_path)"
+          PROJ="$(dirname "$(dirname "$GRADLE")")"
+          cd "$PROJ"
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon -x lint
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE="$(cat /tmp/gp_gradle_path)"
+          PROJ="$(dirname "$(dirname "$GRADLE")")"
+          APK="$(find "$PROJ/app/build/outputs/apk/release" -type f -name '*.apk' | head -n1)"
+          test -n "$APK"
+          cp "$APK" "$GITHUB_WORKSPACE/releases/GreenPlay_5_28_8_52808_HOME_CAPAS_PRONTAS.apk"
+          ls -lh "$GITHUB_WORKSPACE/releases/GreenPlay_5_28_8_52808_HOME_CAPAS_PRONTAS.apk"
+          if command -v apksigner >/dev/null 2>&1; then
+            apksigner verify --verbose "$GITHUB_WORKSPACE/releases/GreenPlay_5_28_8_52808_HOME_CAPAS_PRONTAS.apk"
+          fi
+
+      - name: Commit APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GreenPlay Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git pull --rebase
+          git add releases/GreenPlay_5_28_8_52808_HOME_CAPAS_PRONTAS.apk
+          git commit -m "GreenPlay 5.28.8 signed APK direct build" || exit 0
+          git push
