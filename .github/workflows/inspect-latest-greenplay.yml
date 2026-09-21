@@ -24,10 +24,12 @@ jobs:
           MAIN="$(find /tmp/gp-latest -type f -path '*/app/src/main/java/fun/greenplay/app/MainActivity.java' | head -n1)"
           API="$(find /tmp/gp-latest -type f -path '*/app/src/main/java/fun/greenplay/app/Api.java' | head -n1)"
           GRADLE="$(find /tmp/gp-latest -type f -path '*/app/build.gradle' | head -n1)"
-          test -n "$MAIN" && test -n "$API" && test -n "$GRADLE"
+          IMG="$(find /tmp/gp-latest -type f -path '*/app/src/main/java/fun/greenplay/app/Img.java' | head -n1)"
+          test -n "$MAIN" && test -n "$API" && test -n "$GRADLE" && test -n "$IMG"
           cp "$MAIN" inspection/latest52805/MainActivity.java
           cp "$API" inspection/latest52805/Api.java
           cp "$GRADLE" inspection/latest52805/build.gradle
+          cp "$IMG" inspection/latest52805/Img.java
           {
             echo "SOURCE_ZIP=$ZIP"
             grep -nE 'versionCode|versionName' "$GRADLE" || true
