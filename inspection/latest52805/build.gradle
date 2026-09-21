@@ -1,0 +1,76 @@
+import groovy.json.JsonOutput
+
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'fun.greenplay.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'fun.greenplay.app'
+        minSdk 23
+        targetSdk 35
+        versionCode 52806
+        versionName '5.28.6'
+    }
+    signingConfigs {
+        stableDebug {
+            storeFile file('greenplay-debug.keystore')
+            storePassword 'greenplay_debug_2026'
+            keyAlias 'greenplay_debug'
+            keyPassword 'greenplay_debug_2026'
+        }
+    }
+    buildFeatures {
+        buildConfig = true
+    }
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+    buildTypes {
+        release { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' }
+        debug {
+            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.stableDebug
+        }
+    }
+}
+
+
+// Metadados lidos pelo painel GreenPlay ao clicar em "Detectar versão".
+// versionName/versionCode vêm sempre do Gradle; as correções vêm do arquivo
+// app/RELEASE_NOTES.txt e são incorporadas no APK automaticamente.
+def gpMetadataTask = tasks.register('generateGreenPlayUpdateMetadata') {
+    doLast {
+        def assetsDir = file('src/main/assets')
+        if (!assetsDir.exists()) assetsDir.mkdirs()
+        def releaseFile = file('RELEASE_NOTES.txt')
+        def notes = releaseFile.exists()
+                ? releaseFile.readLines('UTF-8').collect { it.trim() }.findAll { !it.isEmpty() && !it.startsWith('#') }
+                : []
+        def payload = [
+                package    : android.defaultConfig.applicationId,
+                versionName: android.defaultConfig.versionName,
+                versionCode: android.defaultConfig.versionCode,
+                notes      : notes
+        ]
+        new File(assetsDir, 'greenplay_update.json').setText(JsonOutput.prettyPrint(JsonOutput.toJson(payload)), 'UTF-8')
+        new File(assetsDir, 'greenplay_build.properties').setText(
+                'package=' + android.defaultConfig.applicationId + '\n' +
+                'versionName=' + android.defaultConfig.versionName + '\n' +
+                'versionCode=' + android.defaultConfig.versionCode + '\n', 'UTF-8')
+    }
+}
+
+afterEvaluate {
+    tasks.named('preBuild').configure { dependsOn(gpMetadataTask) }
+}
+
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.mediarouter:mediarouter:1.8.1'
+    implementation 'com.google.android.gms:play-services-cast-framework:22.3.1'
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
+}
