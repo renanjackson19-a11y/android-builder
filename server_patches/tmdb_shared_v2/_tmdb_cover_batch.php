@@ -1,5 +1,5 @@
 <?php
-/* GREENPLAY TMDB COVER ON-DEMAND V2.4
+/* GREENPLAY TMDB COVER ON-DEMAND V2.5
  * TMDB-only + cache compartilhado entre provedores.
  * Busca resiliente para nomes de listas IPTV:
  * - remove marcadores técnicos/numeração
@@ -187,9 +187,12 @@ function gp_tmdb_cover_pick($json,$title,$year,$type,$queryUsed=''){
         $cy=gp_tmdb_year($date);
         if($wantYear!==''&&$cy!==''){
             $diff=abs((int)$wantYear-(int)$cy);
+            // Segurança: com ano conhecido, não aceitar obra de época diferente.
+            // Tolerância de 3 anos cobre lançamentos regionais tardios (ex.: filmes asiáticos no Brasil).
+            if($diff>3)continue;
             if($diff===0)$score+=40;
-            elseif($diff===1)$score+=4;
-            else $score-=30;
+            elseif($diff===1)$score+=18;
+            else $score+=5;
         }
         $score+=max(0,6-(int)$i);
         if($score>$bestScore){$bestScore=$score;$best=$r;$bestYear=$cy;}
@@ -211,7 +214,7 @@ function gp_tmdb_cover_pick($json,$title,$year,$type,$queryUsed=''){
 }}
 
 if(!function_exists('gp_tmdb_cover_search_url')){
-function gp_tmdb_cover_search_url($query,$type,$cfg,&$headers){
+function gp_tmdb_cover_search_url($query,$type,$cfg,&$headers,$yearFilter=''){
     $searchType=$type==='series'?'tv':'movie';
     $params=array(
         'language'=>(string)($cfg['language']??'pt-BR'),
@@ -219,6 +222,8 @@ function gp_tmdb_cover_search_url($query,$type,$cfg,&$headers){
         'include_adult'=>'false'
     );
     $region=(string)($cfg['region']??'BR');if($region!=='')$params['region']=$region;
+    $yf=function_exists('gp_tmdb_year')?gp_tmdb_year($yearFilter):'';
+    if($yf!=='')$params[$type==='series'?'first_air_date_year':'year']=$yf;
     $token=(string)$cfg['token'];$mode=(string)($cfg['auth_mode']??'auto');if($mode==='auto')$mode=gp_tmdb_credential_mode($token);
     $headers=array('Accept: application/json','Connection: close');
     if($mode==='api_key_v3')$params['api_key']=$token;else $headers[]='Authorization: Bearer '.$token;
@@ -253,18 +258,24 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
 
         $cands=gp_tmdb_cover_candidates($title,$year);
         if(!$cands){$failed++;continue;}
-        $jobs[$id]=array('id'=>$id,'title'=>$title,'year'=>$year,'cands'=>$cands,'idx'=>0,'done'=>false);
+        $attempts=array();
+        foreach($cands as $cand){
+            if($year!=='')$attempts[]=array('query'=>$cand,'year'=>$year);
+            $attempts[]=array('query'=>$cand,'year'=>'');
+            if(count($attempts)>=10)break;
+        }
+        $jobs[$id]=array('id'=>$id,'title'=>$title,'year'=>$year,'attempts'=>$attempts,'idx'=>0,'done'=>false);
     }
 
     if(!$jobs)return array('requested'=>0,'shared'=>$shared,'cached'=>$cached,'matched'=>0,'failed'=>$failed);
 
-    $maxRounds=7;
+    $maxRounds=10;
     for($round=0;$round<$maxRounds;$round++){
         $todo=array();
         foreach($jobs as $id=>$job){
             if(!empty($job['done']))continue;
             $idx=(int)$job['idx'];
-            if(!isset($job['cands'][$idx]))continue;
+            if(!isset($job['attempts'][$idx]))continue;
             $todo[$id]=$job;
         }
         if(!$todo)break;
@@ -274,8 +285,10 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
 
             foreach($chunk as $id=>$job){
                 $idx=(int)$job['idx'];
-                $query=(string)$job['cands'][$idx];
-                $headers=array();$url=gp_tmdb_cover_search_url($query,$type,$cfg,$headers);$ch=curl_init();
+                $attempt=$job['attempts'][$idx];
+                $query=(string)$attempt['query'];
+                $yearFilter=(string)$attempt['year'];
+                $headers=array();$url=gp_tmdb_cover_search_url($query,$type,$cfg,$headers,$yearFilter);$ch=curl_init();
                 curl_setopt_array($ch,array(
                     CURLOPT_URL=>$url,
                     CURLOPT_RETURNTRANSFER=>true,
@@ -285,7 +298,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     CURLOPT_SSL_VERIFYPEER=>true,
                     CURLOPT_SSL_VERIFYHOST=>2,
                     CURLOPT_HTTPHEADER=>$headers,
-                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.4'
+                    CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.5'
                 ));
                 curl_multi_add_handle($mh,$ch);
                 $handles[$id]=array('ch'=>$ch,'query'=>$query);
@@ -311,7 +324,7 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
                     $release=$type==='series'?(string)($pick['first_air_date']??''):(string)($pick['release_date']??'');
                     $data=array(
                         'cache_version'=>4,
-                        'cover_cache_version'=>3,
+                        'cover_cache_version'=>4,
                         'tmdb_id'=>(int)($pick['id']??0),
                         'title'=>$type==='series'?(string)($pick['name']??$job['title']):(string)($pick['title']??$job['title']),
                         'original_title'=>$type==='series'?(string)($pick['original_name']??''):(string)($pick['original_title']??''),
