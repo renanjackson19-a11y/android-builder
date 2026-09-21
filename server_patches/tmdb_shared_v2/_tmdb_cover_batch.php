@@ -90,7 +90,7 @@ function gp_tmdb_shared_set($type,$title,$year,$data){
 if(!function_exists('gp_tmdb_cover_pick')){
 function gp_tmdb_cover_pick($json,$title,$year,$type){
     $rows=is_array($json['results']??null)?$json['results']:array();
-    $want=gp_tmdb_cover_norm($title);$wantYear=gp_tmdb_year($year);$best=null;$bestScore=-1;
+    $wantTitle=function_exists('gp_tmdb_cover_search_title')?gp_tmdb_cover_search_title($title):$title;$want=gp_tmdb_cover_norm($wantTitle);$wantYear=gp_tmdb_year($year);$best=null;$bestScore=-1;
     foreach(array_slice($rows,0,12) as $i=>$r){
         if(!is_array($r)||empty($r['poster_path']))continue;
         $t=$type==='series'?(string)($r['name']??''):(string)($r['title']??'');
