@@ -146,11 +146,11 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
         $jobs[]=array('id'=>$id,'title'=>$title,'year'=>$year);
     }
     if(!$jobs)return array('requested'=>0,'shared'=>$shared,'cached'=>$cached,'matched'=>0,'failed'=>0);
-    foreach(array_chunk($jobs,10) as $chunk){
+    foreach(array_chunk($jobs,12) as $chunk){
         $mh=curl_multi_init();$handles=array();
         foreach($chunk as $i=>$job){
             $headers=array();$url=gp_tmdb_cover_search_url($job,$type,$cfg,$headers);$ch=curl_init();
-            curl_setopt_array($ch,array(CURLOPT_URL=>$url,CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>$headers,CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.0'));
+            curl_setopt_array($ch,array(CURLOPT_URL=>$url,CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_HTTPHEADER=>$headers,CURLOPT_USERAGENT=>'GreenPlay-TMDB-OnDemand/2.1'));
             curl_multi_add_handle($mh,$ch);$handles[$i]=array('ch'=>$ch,'job'=>$job);$requested++;
         }
         $running=null;do{$mrc=curl_multi_exec($mh,$running);if($running){$n=curl_multi_select($mh,0.25);if($n===-1)usleep(50000);}}while($running&&$mrc===CURLM_OK);
@@ -159,14 +159,14 @@ function gp_tmdb_cover_batch($items,$type,$limit=40){
             $json=(!$err&&$http>=200&&$http<300)?json_decode($raw,true):null;$pick=is_array($json)?gp_tmdb_cover_pick($json,$job['title'],$job['year'],$type):null;
             if($pick){
                 $release=$type==='series'?(string)($pick['first_air_date']??''):(string)($pick['release_date']??'');
-                $data=array('cache_version'=>5,'tmdb_id'=>(int)($pick['id']??0),'title'=>$type==='series'?(string)($pick['name']??$job['title']):(string)($pick['title']??$job['title']),'original_title'=>$type==='series'?(string)($pick['original_name']??''):(string)($pick['original_title']??''),'poster'=>gp_tmdb_img($pick['poster_path']??'','w500'),'backdrop'=>gp_tmdb_img($pick['backdrop_path']??'','w1280'),'overview'=>(string)($pick['overview']??''),'release_date'=>$release,'year'=>gp_tmdb_year($release),'rating'=>(string)($pick['vote_average']??''),'genre'=>'','runtime_minutes'=>'','director'=>'','cast_list'=>array(),'cast'=>'');
+                $data=array('cache_version'=>4,'cover_cache_version'=>2,'tmdb_id'=>(int)($pick['id']??0),'title'=>$type==='series'?(string)($pick['name']??$job['title']):(string)($pick['title']??$job['title']),'original_title'=>$type==='series'?(string)($pick['original_name']??''):(string)($pick['original_title']??''),'poster'=>gp_tmdb_img($pick['poster_path']??'','w500'),'backdrop'=>gp_tmdb_img($pick['backdrop_path']??'','w1280'),'overview'=>(string)($pick['overview']??''),'release_date'=>$release,'year'=>gp_tmdb_year($release),'rating'=>(string)($pick['vote_average']??''),'genre'=>'','runtime_minutes'=>'','director'=>'','cast_list'=>array(),'cast'=>'');
                 if(!empty($data['tmdb_id'])&&!empty($data['poster'])&&gp_tmdb_content_cache_set($type,$job['id'],$data)){
                     gp_tmdb_shared_set($type,$job['title'],$job['year'],$data);$matched++;
                 }else $failed++;
             }else $failed++;
             curl_multi_remove_handle($mh,$ch);curl_close($ch);
         }
-        curl_multi_close($mh);usleep(400000);
+        curl_multi_close($mh);usleep(60000);
     }
     return array('requested'=>$requested,'shared'=>$shared,'cached'=>$cached,'matched'=>$matched,'failed'=>$failed);
 }}
