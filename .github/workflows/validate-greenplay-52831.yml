@@ -88,3 +88,5 @@ jobs:
           set -euo pipefail
           cd work
           gradle assembleDebug --stacktrace --no-daemon
+
+# retry after preserving BootstrapRow
