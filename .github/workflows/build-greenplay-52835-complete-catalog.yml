@@ -1,0 +1,119 @@
+name: Build GreenPlay 5.28.35 Complete Catalog
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52835-complete-catalog.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Prepare GreenPlay 5.28.35
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/1c647610b6d6863016e9501d5ccc4d1bf482dce0/uploads/project-20260922-001053-d98d13.zip \
+            -o /tmp/base52834.zip
+          rm -rf work && mkdir work
+          unzip -q /tmp/base52834.zip -d work
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=p.read_text()
+
+          old='Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){String contentType=typeId==2?"series":"movie";return Api.m("user_id",uid,"type",contentType,"category_id",categoryId,"page_no",String.valueOf(page),"page",String.valueOf(page),"offset",String.valueOf(Math.max(0,offset)),"limit","5000","per_page","5000","page_size","5000","full_catalog","1","all","1");}'
+          new='Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){String contentType=typeId==2?"series":"movie";return Api.m("user_id",uid,"type",contentType,"category_id",categoryId,"page_no",String.valueOf(page),"page",String.valueOf(page),"offset",String.valueOf(Math.max(0,offset)),"limit","120","per_page","120","page_size","120","full_catalog","0");}'
+          if old not in s: raise SystemExit('categoryPageArgs target not found')
+          s=s.replace(old,new,1)
+
+          old='Api.post("content_by_category",Api.m("user_id",uid,"type",contentType,"category_id",cid,"page_no","1","page","1","offset","0","limit","5000","per_page","5000","full_catalog","1"),new Api.CB(){public void ok(JSONObject j){'
+          new='Api.post("content_by_category",Api.m("user_id",uid,"type",contentType,"category_id",cid,"page_no","1","page","1","offset","0","limit","12","per_page","12","page_size","12","full_catalog","0"),new Api.CB(){public void ok(JSONObject j){'
+          if old not in s: raise SystemExit('loadCategoryAt target not found')
+          s=s.replace(old,new,1)
+
+          old='void storeFullCategoryInHomeCache(int typeId,String categoryId,JSONArray rows){\n   try{JSONObject cache=readHomeCache();if(cache==null)return;JSONArray secs=cache.optJSONArray("result");if(secs==null)return;for(int i=0;i<secs.length();i++){JSONObject sec=secs.optJSONObject(i);if(sec==null)continue;int t=sec.optInt("type_id",sec.optInt("video_type",1));String cid=sec.optString("category_id","");if(t==typeId&&categoryId.equals(cid)){sec.put("data",rows);sec.put("category_complete",1);saveHomeCache(cache);return;}}}catch(Exception ignored){}\n  }'
+          new='void storeFullCategoryInHomeCache(int typeId,String categoryId,JSONArray rows){\n   // 5.28.35: nunca grava milhares de cards dentro do snapshot da Home.\n   // A Home fica compacta e a categoria completa vive apenas enquanto a tela está aberta.\n   try{JSONObject cache=readHomeCache();if(cache==null)return;JSONArray secs=cache.optJSONArray("result");if(secs==null)return;for(int i=0;i<secs.length();i++){JSONObject sec=secs.optJSONObject(i);if(sec==null)continue;int t=sec.optInt("type_id",sec.optInt("video_type",1));String cid=sec.optString("category_id","");if(t==typeId&&categoryId.equals(cid)){sec.put("category_total",rows==null?0:rows.length());sec.remove("category_complete");saveHomeCache(cache);return;}}}catch(Exception ignored){}\n  }'
+          if old not in s: raise SystemExit('storeFullCategoryInHomeCache target not found')
+          s=s.replace(old,new,1)
+
+          old='fetchAllCategoryPages(typeId,cid,new AllPagesCB(){public void ok(JSONArray full){if(gen!=viewGen||full==null||full.length()==0)return;JSONArray merged=mergeCategoryRows(first,full);try{sec.put("data",merged);sec.put("category_complete",1);sec.put("category_total",merged.length());}catch(Exception ignored){}storeFullCategoryInHomeCache(typeId,cid,merged);if(first==null||first.length()==0){grid(merged);return;}if(!wideTvUi()&&mobileCategoryGrid!=null&&mobileCategoryGen==gen){mobileCategoryRows=merged;maybeLoadMoreMobileCategory(true);}else if(wideTvUi()&&merged.length()>first.length()){grid(merged);}}public void err(String e){/* Mantem o que ja estava visivel; nunca troca por tela de loading/erro. */}});'
+          new='fetchAllCategoryPages(typeId,cid,new AllPagesCB(){public void ok(JSONArray full){if(gen!=viewGen||full==null||full.length()==0)return;JSONArray merged=mergeCategoryRows(first,full);storeFullCategoryInHomeCache(typeId,cid,merged);if(first==null||first.length()==0){grid(merged);return;}if(!wideTvUi()&&mobileCategoryGrid!=null&&mobileCategoryGen==gen){mobileCategoryRows=merged;maybeLoadMoreMobileCategory(true);}else if(wideTvUi()&&merged.length()>first.length()){grid(merged);}}public void err(String e){/* Mantem o que ja estava visivel; nunca troca por tela de loading/erro. */}});'
+          if old not in s: raise SystemExit('openSection merge target not found')
+          s=s.replace(old,new,1)
+
+          old='if(mainScroll!=null)mainScroll.setOnScrollChangeListener((v,sx,sy,ox,oy)->{if(gen!=viewGen||mobileCategoryGrid!=g)return;int remaining=body==null?0:body.getHeight()-(sy+mainScroll.getHeight());if(remaining<dp(900))maybeLoadMoreMobileCategory(false);});'
+          new='if(mainScroll!=null){mainScroll.setOnScrollChangeListener((v,sx,sy,ox,oy)->{if(gen!=viewGen||mobileCategoryGrid!=g)return;int remaining=body==null?0:body.getHeight()-(sy+mainScroll.getHeight());if(remaining<dp(1200))maybeLoadMoreMobileCategory(false);});final Runnable categoryPump=new Runnable(){public void run(){if(gen!=viewGen||mobileCategoryGrid!=g||mobileCategoryRows==null)return;int remaining=body==null?0:body.getHeight()-(mainScroll.getScrollY()+mainScroll.getHeight());if(remaining<dp(1200))maybeLoadMoreMobileCategory(false);if(mobileCategoryNextIndex<mobileCategoryRows.length())mainScroll.postDelayed(this,180);}};mainScroll.postDelayed(categoryPump,180);}'
+          if old not in s: raise SystemExit('scroll listener target not found')
+          s=s.replace(old,new,1)
+
+          s=s.replace('int start=mobileCategoryNextIndex,end=Math.min(mobileCategoryRows.length(),start+36),h=dp(196);',
+                      'int start=mobileCategoryNextIndex,end=Math.min(mobileCategoryRows.length(),start+48),h=dp(196);',1)
+
+          # Marker only, avoids touching unrelated logic.
+          s=s.replace('public class MainActivity extends Activity{ // GreenPlay 5.28.34',
+                      'public class MainActivity extends Activity{ // GreenPlay 5.28.35')
+          p.write_text(s)
+
+          b=Path('work/app/build.gradle')
+          t=b.read_text().replace('versionCode 52834','versionCode 52835').replace("versionName '5.28.34'","versionName '5.28.35'")
+          if t==b.read_text(): raise SystemExit('version target not found')
+          b.write_text(t)
+
+          s=p.read_text()
+          assert '"limit","120"' in s
+          assert '"limit","12"' in s
+          assert 'categoryPump' in s
+          assert 'start+48' in s
+          assert 'sec.put("data",rows)' not in s
+          assert 'sec.put("data",merged)' not in s
+          print('5.28.35 source prepared')
+          PY
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile debug
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package complete source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          zip -qr ../GreenPlay_Android_Nativo_5_28_52835_CATALOGO_COMPLETO_ESTAVEL.zip . \
+            -x '.gradle/*' 'app/build/*' 'build/*'
+          cp app/build/outputs/apk/debug/app-debug.apk ../GreenPlay_5.28.35-debug.apk
+          ls -lh ../GreenPlay_Android_Nativo_5_28_52835_CATALOGO_COMPLETO_ESTAVEL.zip ../GreenPlay_5.28.35-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.35-complete-catalog
+          path: |
+            GreenPlay_Android_Nativo_5_28_52835_CATALOGO_COMPLETO_ESTAVEL.zip
+            GreenPlay_5.28.35-debug.apk
+          if-no-files-found: error
+          retention-days: 14
