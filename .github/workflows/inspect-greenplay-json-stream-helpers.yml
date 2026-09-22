@@ -1,0 +1,22 @@
+name: Inspect GreenPlay JSON Stream Helpers
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-json-stream-helpers.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/283c31cdd617927296397d01a10ed785e85220ab/uploads/project-20260922-020307-c4ac1a.zip -o /tmp/p.zip
+          mkdir work && unzip -q /tmp/p.zip -d work
+          F=work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          sed -n '775,820p' "$F"
+          grep -n "void writeJsonStream\|writeJsonStream(" "$F" | head -n 40
