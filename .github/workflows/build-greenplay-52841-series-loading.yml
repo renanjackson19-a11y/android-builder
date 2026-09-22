@@ -1,0 +1,81 @@
+name: Build GreenPlay 5.28.41 Series Counts Loading Footer
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52841-series-loading.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.40 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.40-mobile-paging
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35702553614
+
+      - name: Apply 5.28.41 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52840_MOBILE_PAGING.zip -d work
+          python3 inspection/patch52841.py
+          grep -q 'versionCode 52841' work/app/build.gradle
+          grep -q 'catalog52841_' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'Carregando mais conteúdo' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'finalSingle' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q '"limit","5000"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q '"full_catalog","1"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.41-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52841_SERIES_LOADING.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52841_SERIES_LOADING.zip >/dev/null
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.41-series-loading
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
