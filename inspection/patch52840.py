@@ -66,6 +66,7 @@ new=''' void openSection(JSONObject sec){
 '''
 assert old in s
 s=s.replace(old,new,1)
+p.write_text(s)
 
 b=Path('work/app/build.gradle')
 t=b.read_text()
