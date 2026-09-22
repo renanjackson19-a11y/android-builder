@@ -1,0 +1,149 @@
+name: Build GreenPlay 5.28.35 Fixed Catalog
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52835-fixed-catalog.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Prepare source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/1c647610b6d6863016e9501d5ccc4d1bf482dce0/uploads/project-20260922-001053-d98d13.zip \
+            -o /tmp/base52834.zip
+          rm -rf work
+          mkdir work
+          unzip -q /tmp/base52834.zip -d work
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=p.read_text()
+
+          # 1) Home nunca pede catálogo gigante.
+          s=s.replace(
+              '"want_live",wantLive?"1":"0","full_catalog","1"',
+              '"want_live",wantLive?"1":"0","full_catalog","0"',
+              1
+          )
+
+          # 2) Categoria aberta: pagina 120 por vez até total_rows.
+          old='Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){String contentType=typeId==2?"series":"movie";return Api.m("user_id",uid,"type",contentType,"category_id",categoryId,"page_no",String.valueOf(page),"page",String.valueOf(page),"offset",String.valueOf(Math.max(0,offset)),"limit","5000","per_page","5000","page_size","5000","full_catalog","1","all","1");}'
+          new='Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){String contentType=typeId==2?"series":"movie";return Api.m("user_id",uid,"type",contentType,"category_id",categoryId,"page_no",String.valueOf(page),"page",String.valueOf(page),"offset",String.valueOf(Math.max(0,offset)),"limit","120","per_page","120","page_size","120","full_catalog","0","all","1");}'
+          if old not in s:
+              raise SystemExit('ERRO categoryPageArgs')
+          s=s.replace(old,new,1)
+
+          # 3) Home e Shorts recebem só amostra; abrir categoria busca tudo paginado.
+          s=s.replace('"limit","5000","per_page","5000","page_size","5000","full_catalog","1"',
+                      '"limit","12","per_page","12","page_size","12","full_catalog","0"')
+          s=s.replace('"limit","5000","per_page","5000","full_catalog","1"',
+                      '"limit","12","per_page","12","page_size","12","full_catalog","0"')
+
+          # 4) Erro no meio da paginação nunca vira "catálogo completo".
+          s=s.replace(
+              'public void err(String e){if(request!=tvBrowserGridGeneration)return;if(acc.length()>0)cb.ok(acc);else cb.err(e);}});',
+              'public void err(String e){if(request!=tvBrowserGridGeneration)return;cb.err(e);}});',
+              1
+          )
+          s=s.replace(
+              'public void err(String e){if(acc.length()>0)cb.ok(acc);else cb.err(e);}});',
+              'public void err(String e){cb.err(e);}});',
+              1
+          )
+
+          # 5) Se resposta vier vazia antes de total_rows, não aceita como final.
+          old='JSONArray rows=j.optJSONArray("result");if(rows==null||rows.length()==0){cb.ok(acc);return;}int total=categoryResponseTotal(j),added=0;'
+          new='JSONArray rows=j.optJSONArray("result");int total=categoryResponseTotal(j);if(rows==null||rows.length()==0){if(total>0&&acc.length()<total){cb.err("Catálogo incompleto");return;}cb.ok(acc);return;}int added=0;'
+          if s.count(old) < 2:
+              raise SystemExit('ERRO rows pagination')
+          s=s.replace(old,new,2)
+
+          old='if(total>0&&acc.length()>=total){cb.ok(acc);return;}if(added==0){cb.ok(acc);return;}'
+          new='if(total>0&&acc.length()>=total){cb.ok(acc);return;}if(added==0){if(total>0&&acc.length()<total){cb.err("Catálogo incompleto");return;}cb.ok(acc);return;}'
+          if s.count(old) < 2:
+              raise SystemExit('ERRO added pagination')
+          s=s.replace(old,new,2)
+
+          # 6) Não grava 2k/10k cards no snapshot da Home; evita OOM e cache gigante.
+          old='fetchAllCategoryPages(typeId,cid,new AllPagesCB(){public void ok(JSONArray full){if(gen!=viewGen||full==null||full.length()==0)return;JSONArray merged=mergeCategoryRows(first,full);try{sec.put("data",merged);sec.put("category_complete",1);sec.put("category_total",merged.length());}catch(Exception ignored){}storeFullCategoryInHomeCache(typeId,cid,merged);if(first==null||first.length()==0){grid(merged);return;}if(!wideTvUi()&&mobileCategoryGrid!=null&&mobileCategoryGen==gen){mobileCategoryRows=merged;maybeLoadMoreMobileCategory(true);}else if(wideTvUi()&&merged.length()>first.length()){grid(merged);}}public void err(String e){/* Mantem o que ja estava visivel; nunca troca por tela de loading/erro. */}});'
+          new='fetchAllCategoryPages(typeId,cid,new AllPagesCB(){public void ok(JSONArray full){if(gen!=viewGen||full==null||full.length()==0)return;JSONArray merged=mergeCategoryRows(first,full);if(first==null||first.length()==0){grid(merged);return;}if(!wideTvUi()&&mobileCategoryGrid!=null&&mobileCategoryGen==gen){mobileCategoryRows=merged;maybeLoadMoreMobileCategory(true);}else if(wideTvUi()&&merged.length()>first.length()){grid(merged);}}public void err(String e){/* Mantem a amostra e permite nova tentativa ao reabrir. */}});'
+          if old not in s:
+              raise SystemExit('ERRO openSection')
+          s=s.replace(old,new,1)
+
+          # 7) No celular, continue materializando os cards à medida que desce.
+          s=s.replace(
+              'int start=mobileCategoryNextIndex,end=Math.min(mobileCategoryRows.length(),start+36),h=dp(196);',
+              'int start=mobileCategoryNextIndex,end=Math.min(mobileCategoryRows.length(),start+48),h=dp(196);',
+              1
+          )
+
+          p.write_text(s)
+
+          b=Path('work/app/build.gradle')
+          t=b.read_text()
+          if 'versionCode 52834' not in t:
+              raise SystemExit('ERRO versionCode')
+          t=t.replace('versionCode 52834','versionCode 52835',1)
+          t=t.replace("versionName '5.28.34'","versionName '5.28.35'",1)
+          b.write_text(t)
+
+          # Validações
+          s=p.read_text()
+          assert '"limit","120"' in s
+          assert '"full_catalog","0","all","1"' in s
+          assert 'versionCode 52835' in b.read_text()
+          print('OK 5.28.35 preparado')
+          PY
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.35-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52835_CATALOGO_COMPLETO_PAGINADO.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52835_CATALOGO_COMPLETO_PAGINADO.zip >/dev/null
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.35-fixed
+          path: out/*
+          if-no-files-found: error
+          retention-days: 14
