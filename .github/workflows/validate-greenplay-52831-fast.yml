@@ -1,0 +1,71 @@
+name: Validate GreenPlay 5.28.31 Fast
+
+on:
+  push:
+    paths:
+      - '.github/workflows/validate-greenplay-52831-fast.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download and prepare exact 5.28.31
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir -p work
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/main/uploads/project-20260921-205513-9ea8ce.zip \
+            -o /tmp/base52830.zip
+          unzip -q /tmp/base52830.zip -d work
+
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/main/validation/52831/mainactivity.diff.gz.b64 \
+            -o /tmp/52831.b64
+          test "$(tr -d '\r\n' < /tmp/52831.b64 | wc -c)" -eq 15172
+          tr -d '\r\n' < /tmp/52831.b64 | base64 -d | gzip -d > /tmp/52831.diff
+          sed -i \
+            -e 's#a/mnt/data/MainActivity_52830.java#a/app/src/main/java/fun/greenplay/app/MainActivity.java#g' \
+            -e 's#b/mnt/data/gp52831/app/src/main/java/fun/greenplay/app/MainActivity.java#b/app/src/main/java/fun/greenplay/app/MainActivity.java#g' \
+            /tmp/52831.diff
+          (cd work && patch -p1 --forward --batch < /tmp/52831.diff)
+
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path('work/app/build.gradle')
+          t=b.read_text().replace('versionCode 52830','versionCode 52831').replace("versionName '5.28.30'","versionName '5.28.31'")
+          b.write_text(t)
+          p=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=p.read_text()
+          assert 'GreenPlay 5.28.31' in s
+          assert 'class BootstrapRow{' in s
+          assert 'void maybeLoadMoreMobileCategory' in s
+          assert 'atomic_all_categories' in s
+          assert 'Carregando conteúdo completo' not in s
+          print('prepared', len(s))
+          PY
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile debug
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
