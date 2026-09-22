@@ -189,15 +189,15 @@ jobs:
         run: |
           set -euo pipefail
           cat > work/README_GREENPLAY_5_28_52852.txt <<'EOF'
-GreenPlay 5.28.52
-- GreenShorts sem categorias, no mesmo padrão de carregamento de Filmes/Séries.
-- Primeiros itens aparecem assim que a primeira página chega; próximas páginas carregam ao rolar.
-- Rodapé "Carregando mais conteúdo..." igual ao catálogo.
-- Capas voltaram ao mesmo enquadramento de Filmes/Séries.
-- Player GreenShorts continua vertical.
-- GreenShorts salva progresso e mostra Continuar assistindo / Assistir do início.
-- Filmes e Séries não foram alterados.
-EOF
+          GreenPlay 5.28.52
+          - GreenShorts sem categorias, no mesmo padrão de carregamento de Filmes/Séries.
+          - Primeiros itens aparecem assim que a primeira página chega; próximas páginas carregam ao rolar.
+          - Rodapé "Carregando mais conteúdo..." igual ao catálogo.
+          - Capas voltaram ao mesmo enquadramento de Filmes/Séries.
+          - Player GreenShorts continua vertical.
+          - GreenShorts salva progresso e mostra Continuar assistindo / Assistir do início.
+          - Filmes e Séries não foram alterados.
+          EOF
           mkdir -p out
           cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.52-debug.apk
           (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52852_GREENSHORTS_PADRAO.zip . -x '.gradle/*' 'app/build/*' 'build/*')
