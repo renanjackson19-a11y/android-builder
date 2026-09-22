@@ -1,4 +1,4 @@
-name: Build GreenPlay 5.28.48 Green Player
+name: Build GreenPlay 5.28.48 Green Player\n# java8-fix
 
 on:
   push:
