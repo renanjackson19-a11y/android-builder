@@ -1,0 +1,79 @@
+name: Build GreenPlay 5.28.45 Strict GreenShorts Filter
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52845-greenshorts-filter.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.44 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.44-greenshorts-covers
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35763748918
+
+      - name: Apply 5.28.45 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52844_GREENSHORTS_CAPAS.zip -d work
+          python3 inspection/patch52845.py
+          grep -q 'versionCode 52845' work/app/build.gradle
+          grep -q 'shortsItemMatchesSection' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'filterShortsSectionItems' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'addHomeTopMediaTab(tabs,R.drawable.top_shorts,"Shorts",selected)' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.45-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52845_GREENSHORTS_FILTRO.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52845_GREENSHORTS_FILTRO.zip >/dev/null
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.45-greenshorts-filter
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
