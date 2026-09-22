@@ -1,0 +1,169 @@
+name: Build GreenPlay 5.28.36 Provider Catalog Stable
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52836-provider-catalog-stable.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Prepare source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/1c647610b6d6863016e9501d5ccc4d1bf482dce0/uploads/project-20260922-001053-d98d13.zip \
+            -o /tmp/base52834.zip
+          rm -rf work
+          mkdir work
+          unzip -q /tmp/base52834.zip -d work
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=p.read_text()
+
+          # Home nunca pede catálogo gigante.
+          s=s.replace(
+              '"want_live",wantLive?"1":"0","full_catalog","1"',
+              '"want_live",wantLive?"1":"0","full_catalog","0"',
+              1
+          )
+
+          # Cada categoria aberta pagina em blocos seguros.
+          old='Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){String contentType=typeId==2?"series":"movie";return Api.m("user_id",uid,"type",contentType,"category_id",categoryId,"page_no",String.valueOf(page),"page",String.valueOf(page),"offset",String.valueOf(Math.max(0,offset)),"limit","5000","per_page","5000","page_size","5000","full_catalog","1","all","1");}'
+          new='Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){String contentType=typeId==2?"series":"movie";return Api.m("user_id",uid,"type",contentType,"category_id",categoryId,"page_no",String.valueOf(page),"page",String.valueOf(page),"offset",String.valueOf(Math.max(0,offset)),"limit","120","per_page","120","page_size","120","full_catalog","0","all","1");}'
+          if old not in s:
+              raise SystemExit('ERRO categoryPageArgs')
+          s=s.replace(old,new,1)
+
+          # Home/Shorts usam prévia pequena; ao abrir, a categoria busca todas as páginas.
+          s=s.replace('"limit","5000","per_page","5000","page_size","5000","full_catalog","1"',
+                      '"limit","12","per_page","12","page_size","12","full_catalog","0"')
+          s=s.replace('"limit","5000","per_page","5000","full_catalog","1"',
+                      '"limit","12","per_page","12","page_size","12","full_catalog","0"')
+
+          # Falha no meio da paginação nunca vira "completo".
+          s=s.replace(
+              'public void err(String e){if(request!=tvBrowserGridGeneration)return;if(acc.length()>0)cb.ok(acc);else cb.err(e);}});',
+              'public void err(String e){if(request!=tvBrowserGridGeneration)return;cb.err(e);}});',
+              1
+          )
+          s=s.replace(
+              'public void err(String e){if(acc.length()>0)cb.ok(acc);else cb.err(e);}});',
+              'public void err(String e){cb.err(e);}});',
+              1
+          )
+
+          old='JSONArray rows=j.optJSONArray("result");if(rows==null||rows.length()==0){cb.ok(acc);return;}int total=categoryResponseTotal(j),added=0;'
+          new='JSONArray rows=j.optJSONArray("result");int total=categoryResponseTotal(j);if(rows==null||rows.length()==0){if(total>0&&acc.length()<total){cb.err("Catálogo incompleto");return;}cb.ok(acc);return;}int added=0;'
+          if s.count(old) < 2:
+              raise SystemExit('ERRO rows pagination')
+          s=s.replace(old,new,2)
+
+          old='if(total>0&&acc.length()>=total){cb.ok(acc);return;}if(added==0){cb.ok(acc);return;}'
+          new='if(total>0&&acc.length()>=total){cb.ok(acc);return;}if(added==0){if(total>0&&acc.length()<total){cb.err("Catálogo incompleto");return;}cb.ok(acc);return;}'
+          if s.count(old) < 2:
+              raise SystemExit('ERRO added pagination')
+          s=s.replace(old,new,2)
+
+          # Não coloca milhares de cards dentro do snapshot da Home.
+          old='fetchAllCategoryPages(typeId,cid,new AllPagesCB(){public void ok(JSONArray full){if(gen!=viewGen||full==null||full.length()==0)return;JSONArray merged=mergeCategoryRows(first,full);try{sec.put("data",merged);sec.put("category_complete",1);sec.put("category_total",merged.length());}catch(Exception ignored){}storeFullCategoryInHomeCache(typeId,cid,merged);if(first==null||first.length()==0){grid(merged);return;}if(!wideTvUi()&&mobileCategoryGrid!=null&&mobileCategoryGen==gen){mobileCategoryRows=merged;maybeLoadMoreMobileCategory(true);}else if(wideTvUi()&&merged.length()>first.length()){grid(merged);}}public void err(String e){/* Mantem o que ja estava visivel; nunca troca por tela de loading/erro. */}});'
+          new='fetchAllCategoryPages(typeId,cid,new AllPagesCB(){public void ok(JSONArray full){if(gen!=viewGen||full==null||full.length()==0)return;JSONArray merged=mergeCategoryRows(first,full);if(first==null||first.length()==0){grid(merged);return;}if(!wideTvUi()&&mobileCategoryGrid!=null&&mobileCategoryGen==gen){mobileCategoryRows=merged;maybeLoadMoreMobileCategory(true);}else if(wideTvUi()&&merged.length()>first.length()){grid(merged);}}public void err(String e){/* Mantem a amostra e permite nova tentativa ao reabrir. */}});'
+          if old not in s:
+              raise SystemExit('ERRO openSection')
+          s=s.replace(old,new,1)
+
+          # Tenta novamente categorias da Home que oscilarem.
+          s=s.replace('fetchCategoryHomeSection(typeId,cat,0,new PreparedHomeCB(){',
+                      'fetchCategoryHomeSection(typeId,cat,2,new PreparedHomeCB(){')
+
+          # Novo schema: um cache por usuário+provedor, sem reutilizar snapshot parcial antigo.
+          old='String raw="catalog52809_"+(uid==null?"":uid)+"_"+(Api.PROVIDER==null?"":Api.PROVIDER);return raw.replaceAll("[^A-Za-z0-9._-]","_");'
+          new='String raw="catalog52836_"+(uid==null?"":uid)+"_"+(Api.PROVIDER==null?"":Api.PROVIDER);return raw.replaceAll("[^A-Za-z0-9._-]","_");'
+          if old not in s:
+              raise SystemExit('ERRO persistent schema')
+          s=s.replace(old,new,1)
+
+          s=s.replace(
+              'int start=mobileCategoryNextIndex,end=Math.min(mobileCategoryRows.length(),start+36),h=dp(196);',
+              'int start=mobileCategoryNextIndex,end=Math.min(mobileCategoryRows.length(),start+48),h=dp(196);',
+              1
+          )
+
+          p.write_text(s)
+
+          b=Path('work/app/build.gradle')
+          t=b.read_text()
+          if 'versionCode 52834' not in t:
+              raise SystemExit('ERRO versionCode')
+          t=t.replace('versionCode 52834','versionCode 52836',1)
+          t=t.replace("versionName '5.28.34'","versionName '5.28.36'",1)
+          b.write_text(t)
+
+          Path('work/README_GREENPLAY_5_28_52836.txt').write_text(
+              'GreenPlay 5.28.36\n'
+              'Catalogo completo por provedor.\n'
+              'Home com retry de categorias.\n'
+              'Categorias grandes paginadas em blocos de 120.\n'
+              'Cache separado por usuario e provedor.\n'
+              'Nao marca resposta parcial como catalogo completo.\n'
+              'Mantem correcoes de retorno da Home/Perfil da 5.28.34.\n'
+          )
+
+          s=p.read_text()
+          assert '"limit","120"' in s
+          assert '"full_catalog","0","all","1"' in s
+          assert 'catalog52836_' in s
+          assert 'fetchCategoryHomeSection(typeId,cat,2' in s
+          assert '"limit","5000"' not in s
+          assert 'versionCode 52836' in b.read_text()
+          print('OK 5.28.36 preparado')
+          PY
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.36-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip >/dev/null
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.36-provider-catalog-stable
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
