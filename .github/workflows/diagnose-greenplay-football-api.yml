@@ -1,0 +1,44 @@
+name: Diagnose GreenPlay Football API
+
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnose-greenplay-football-api.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Test football endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://greenplay.fun/api/dtlive/football/'
+          BODY='{"date":"2026-09-22"}'
+          rm -f /tmp/fb.body /tmp/fb.headers
+          code=$(curl -sS --max-time 30             -o /tmp/fb.body -D /tmp/fb.headers             -w '%{http_code}'             -H 'Content-Type: application/json'             --data "$BODY" "$URL" || true)
+          echo "HTTP=$code"
+          echo "=== headers ==="
+          sed -n '1,30p' /tmp/fb.headers || true
+          echo "=== body summary ==="
+          python3 - <<'PY'
+          import json, pathlib
+          p=pathlib.Path('/tmp/fb.body')
+          raw=p.read_text(errors='replace') if p.exists() else ''
+          print('bytes=',len(raw))
+          try:
+              j=json.loads(raw)
+              safe={}
+              for k in ['status','message','code','date','timezone','cached','stale','count','source','upstream_http','error','errors','cache_age']:
+                  if k in j: safe[k]=j[k]
+              print(json.dumps(safe,ensure_ascii=False,indent=2)[:8000])
+              r=j.get('result')
+              if isinstance(r,list):
+                  print('result_len=',len(r))
+          except Exception:
+              print(raw[:8000])
+          PY
