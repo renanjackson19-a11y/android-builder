@@ -1,0 +1,64 @@
+name: Build GreenPlay 5.28.59 TV Player No Jump
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52859-tv-player-no-jump.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download 5.28.58 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.58-tv-player-nav-standard
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35797780945
+      - name: Patch source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52858_TV_PLAYER_NAV_STANDARD.zip -d work
+          python3 inspection/patch52859_tv_player_no_jump.py
+          grep -q 'versionCode 52859' work/app/build.gradle
+          grep -q 'playerReady' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+          grep -q 'postDelayed' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.59-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52859_TV_PLAYER_NO_JUMP.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52859_TV_PLAYER_NO_JUMP.zip >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.59-tv-player-no-jump
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
