@@ -57,3 +57,16 @@ jobs:
           set -euo pipefail
           cd work
           gradle assembleDebug --stacktrace --no-daemon
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          (cd work && zip -qr ../dist/GreenPlay_Android_Nativo_5_28_52834_CORRIGE_VOLTA_ALTERAR_SERVIDOR.zip .)
+          cp work/app/build/outputs/apk/debug/app-debug.apk dist/GreenPlay_5.28.34_DEBUG.apk
+          ls -lh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.34-provider-return-fix
+          path: dist/*
+          if-no-files-found: error
