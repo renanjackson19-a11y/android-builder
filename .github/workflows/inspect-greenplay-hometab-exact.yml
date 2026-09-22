@@ -1,0 +1,26 @@
+name: Inspect GreenPlay HomeTab Exact
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-hometab-exact.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/b249a4153e2d626422639dcdc7f3d1439ecda257/uploads/project-20260921-234805-ae4fe1.zip -o /tmp/p.zip
+          mkdir work && unzip -q /tmp/p.zip -d work
+          F=work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          echo '===== HOMETAB DEF ====='
+          grep -n "void homeTab" "$F"
+          echo '===== 1180-1310 ====='
+          sed -n '1180,1310p' "$F"
+          echo '===== 2670-2695 ====='
+          sed -n '2670,2695p' "$F"
