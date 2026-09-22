@@ -1,0 +1,22 @@
+name: Inspect GreenPlay Shell Cancel Minimal
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-shell-cancel-minimal.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/b249a4153e2d626422639dcdc7f3d1439ecda257/uploads/project-20260921-234805-ae4fe1.zip -o /tmp/p.zip
+          mkdir work && unzip -q /tmp/p.zip -d work
+          F=work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          sed -n '920,985p' "$F"
+          grep -n -A12 -B4 "void cancelProviderSwitch" "$F"
