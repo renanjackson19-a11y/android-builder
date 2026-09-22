@@ -1,0 +1,22 @@
+name: Inspect GreenPlay Explore Sections
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-explore-sections.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/b249a4153e2d626422639dcdc7f3d1439ecda257/uploads/project-20260921-234805-ae4fe1.zip -o /tmp/p.zip
+          mkdir work && unzip -q /tmp/p.zip -d work
+          F=work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -nE "void loadExplore|void render.*Home|void render.*Explore|void append.*Home|void show.*Home|Adicionados recentemente|appendMissingHomeCategories|renderSection|homeSection|featured" "$F" | head -n 220
+          sed -n '1310,1585p' "$F"
