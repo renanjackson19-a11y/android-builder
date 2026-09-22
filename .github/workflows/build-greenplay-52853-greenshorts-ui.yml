@@ -1,0 +1,134 @@
+name: Build GreenPlay 5.28.53 GreenShorts UI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52853-greenshorts-ui.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.52 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.52-greenshorts-pattern
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35786755424
+
+      - name: Apply 5.28.53 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52852_GREENSHORTS_PADRAO.zip -d work
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gradle = Path('work/app/build.gradle')
+          g = gradle.read_text()
+          assert 'versionCode 52852' in g
+          assert "versionName '5.28.52'" in g
+          g = g.replace('versionCode 52852', 'versionCode 52853', 1)
+          g = g.replace("versionName '5.28.52'", "versionName '5.28.53'", 1)
+          gradle.write_text(g)
+
+          p = Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s = p.read_text()
+
+          old = 'JSONArray seed=readGreenShortsSeedCache();\n  grid(seed);\n  startGreenShortsPaging(seed,gen);'
+          new = 'JSONArray seed=readGreenShortsSeedCache();\n  if(seed.length()>0)featureCarousel(seed);\n  grid(seed);\n  startGreenShortsPaging(seed,gen);'
+          assert old in s, 'GreenShorts mobile list block not found'
+          s = s.replace(old, new, 1)
+
+          old = 'line.addView(play,new LinearLayout.LayoutParams(dp(38),dp(42)));'
+          new = 'line.addView(play,new LinearLayout.LayoutParams(dp(38),dp(56)));'
+          assert old in s, 'resume play block not found'
+          s = s.replace(old, new, 1)
+
+          old = 'tt.setSingleLine(true);tt.setEllipsize(android.text.TextUtils.TruncateAt.END);'
+          new = 'tt.setSingleLine(false);tt.setMaxLines(2);tt.setEllipsize(android.text.TextUtils.TruncateAt.END);'
+          assert old in s, 'resume title single line block not found'
+          s = s.replace(old, new, 1)
+
+          old = 'words.addView(tt);line.addView(words,new LinearLayout.LayoutParams(0,dp(44),1));card.addView(line,new LinearLayout.LayoutParams(-1,dp(44)));'
+          new = 'words.addView(tt,new LinearLayout.LayoutParams(-1,0,1));line.addView(words,new LinearLayout.LayoutParams(0,dp(58),1));card.addView(line,new LinearLayout.LayoutParams(-1,dp(58)));'
+          assert old in s, 'resume title layout block not found'
+          s = s.replace(old, new, 1)
+
+          old = 'card.setOnClickListener(v->openYoutubeVideo(source,title,false));LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(-1,dp(72));'
+          new = 'card.setOnClickListener(v->openYoutubeVideo(source,title,false));LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(-1,dp(88));'
+          assert old in s, 'resume card height block not found'
+          s = s.replace(old, new, 1)
+
+          assert 'addHomeTopMediaTab(tabs,R.drawable.top_shorts,"Shorts",selected);' in s
+          assert 'if("Shorts".equals(action))item.setContentDescription("GreenShorts");' in s
+          p.write_text(s)
+          PY
+
+          cat > work/README_GREENPLAY_5_28_52853.txt <<'EOF'
+          GreenPlay 5.28.53
+          - GreenShorts continua visível como atalho fixo no topo do aplicativo.
+          - GreenShorts voltou a ter carrossel/destaque grande acima da grade, como no visual anterior.
+          - A grade e o carregamento progressivo continuam abaixo do carrossel.
+          - O cartão "Continuar assistindo" agora mostra o título em até duas linhas, sem esconder o nome.
+          - Player GreenShorts continua vertical.
+          - Base: GreenPlay 5.28.52.
+          EOF
+
+          grep -q 'versionCode 52853' work/app/build.gradle
+          grep -q "versionName '5.28.53'" work/app/build.gradle
+          grep -q 'if(seed.length()>0)featureCarousel(seed)' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'tt.setMaxLines(2)' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'R.drawable.top_shorts,"Shorts",selected' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.53-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52853_GREENSHORTS_UI.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52853_GREENSHORTS_UI.zip >/dev/null
+          sha256sum out/GreenPlay_5.28.53-debug.apk
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.53-greenshorts-ui
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
