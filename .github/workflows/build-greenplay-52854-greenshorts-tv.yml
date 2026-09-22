@@ -1,0 +1,140 @@
+name: Build GreenPlay 5.28.54 GreenShorts TV
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52854-greenshorts-tv.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.53 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.53-greenshorts-ui
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35792101177
+
+      - name: Apply 5.28.54 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52853_GREENSHORTS_UI.zip -d work
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle=Path('work/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 52853' in g
+          assert "versionName '5.28.53'" in g
+          g=g.replace('versionCode 52853','versionCode 52854',1)
+          g=g.replace("versionName '5.28.53'","versionName '5.28.54'",1)
+          gradle.write_text(g)
+
+          p=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=p.read_text()
+
+          old='TextView navHome,navFav,navTv,navFootball,navMovies,navSeries,navKids,navDownloads,navProfile;'
+          new='TextView navHome,navFav,navTv,navFootball,navMovies,navSeries,navShorts,navKids,navDownloads,navProfile;'
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='// Menu TV: TV, Destaque, Futebol, Filmes, Séries, Kids e Favoritos. Anime/Hot não entram no modo TV.'
+          new='// Menu TV: TV, Destaque, Futebol, Filmes, Séries, GreenShorts, Kids e Favoritos. Anime/Hot não entram no modo TV.'
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='navSeries=tvHeroNavAction("Séries",()->{if(tvMode)openTvCatalogBrowser(2,"Séries",false);else{if(detailOpen)closeDetails();homeTab("Séries");}});uiTextSize(navSeries,16);menu.addView(navSeries,new LinearLayout.LayoutParams(dp(78),dp(58)));\n  navKids='
+          new='navSeries=tvHeroNavAction("Séries",()->{if(tvMode)openTvCatalogBrowser(2,"Séries",false);else{if(detailOpen)closeDetails();homeTab("Séries");}});uiTextSize(navSeries,16);menu.addView(navSeries,new LinearLayout.LayoutParams(dp(78),dp(58)));\n  navShorts=tvHeroNavAction("GreenShorts",()->{if(detailOpen)closeDetails();homeTab("Shorts");});navShorts.setContentDescription("GreenShorts");uiTextSize(navShorts,15);menu.addView(navShorts,new LinearLayout.LayoutParams(dp(126),dp(58)));\n  navKids='
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='focus.add(navMovies);focus.add(navSeries);focus.add(navKids);'
+          new='focus.add(navMovies);focus.add(navSeries);focus.add(navShorts);focus.add(navKids);'
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='if("Séries".equals(activeHomeTab)&&v==navSeries)return true;return "Kids".equals(activeHomeTab)&&v==navKids;'
+          new='if("Séries".equals(activeHomeTab)&&v==navSeries)return true;if("Shorts".equals(activeHomeTab)&&v==navShorts)return true;return "Kids".equals(activeHomeTab)&&v==navKids;'
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='TextView[] all={navTv,navHome,navFootball,navMovies,navSeries,navKids,navFav,navProfile};'
+          new='TextView[] all={navTv,navHome,navFootball,navMovies,navSeries,navShorts,navKids,navFav,navProfile};'
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='else if("Séries".equals(selected))active=navSeries;else if("Kids".equals(selected))active=navKids;'
+          new='else if("Séries".equals(selected))active=navSeries;else if("Shorts".equals(selected))active=navShorts;else if("Kids".equals(selected))active=navKids;'
+          assert old in s
+          s=s.replace(old,new,1)
+
+          p.write_text(s)
+          PY
+
+          cat > work/README_GREENPLAY_5_28_52854.txt <<'EOF'
+          GreenPlay 5.28.54
+          - GreenShorts agora aparece também no menu superior do modo TV/TV Box.
+          - GreenShorts fica entre Séries e Kids.
+          - Foco do controle remoto incluído no item GreenShorts.
+          - Seleção do GreenShorts fica destacada no menu TV.
+          - Ao entrar, carrega o catálogo GreenShorts completo em grade para TV.
+          - Mantém as correções da 5.28.53 no celular e o player vertical.
+          EOF
+
+          grep -q 'versionCode 52854' work/app/build.gradle
+          grep -q "versionName '5.28.54'" work/app/build.gradle
+          grep -q 'navShorts=tvHeroNavAction("GreenShorts"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q '"Shorts".equals(selected))active=navShorts' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.54-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52854_GREENSHORTS_TV.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52854_GREENSHORTS_TV.zip >/dev/null
+          sha256sum out/GreenPlay_5.28.54-debug.apk
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.54-greenshorts-tv
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
