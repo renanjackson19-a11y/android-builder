@@ -1,0 +1,23 @@
+name: Inspect GreenPlay 5.28.34 Mobile Grid
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52834-mobile-grid.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/1c647610b6d6863016e9501d5ccc4d1bf482dce0/uploads/project-20260922-001053-d98d13.zip -o /tmp/p.zip
+          mkdir work && unzip -q /tmp/p.zip -d work
+          F=work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -nE "^ *void (openSection|grid|renderMobile|maybeLoadMoreMobileCategory)|mobileCategory" "$F" | head -n 200
+          sed -n '1040,1185p' "$F"
+          sed -n '1240,1325p' "$F"
