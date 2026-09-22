@@ -89,4 +89,4 @@ jobs:
           cd work
           gradle assembleDebug --stacktrace --no-daemon
 
-# retry after preserving BootstrapRow
+# retry after preserving BootstrapRow and verified patch checksum
