@@ -1,0 +1,50 @@
+name: Inspect GreenPlay 5.28.51 GreenShorts Flow
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52851-greenshorts.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.51-player-ui-clean
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35782981941
+      - name: Inspect GreenShorts and movie flows
+        shell: bash
+        run: |
+          set -e
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52851_PLAYER_UI_CLEAN.zip -d work
+          F=work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          echo '=== GREENS SHORTS REFERENCES ==='
+          grep -n -i -E 'GreenShort|greenshorts|Shorts|Carregando mais conteúdo|Carregando GreenShorts|loadMore|nextPage|page_no|more_page|Continuar assistindo|Assistir do início|Retomar de onde parou|Recomeçar' "$F" | head -n 400
+          echo '=== FUNCTIONS AROUND GREENSHORTS ==='
+          python3 - <<'PY'
+from pathlib import Path
+s=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java').read_text()
+needles=['GreenShort','greenshorts','Carregando GreenShorts','Carregando mais conteúdo','Continuar assistindo','Assistir do início']
+for n in needles:
+    print('\n###',n)
+    pos=0;count=0
+    while True:
+        i=s.lower().find(n.lower(),pos)
+        if i<0: break
+        a=max(0,i-1800);b=min(len(s),i+3500)
+        print(s[a:b])
+        print('\n---MATCH---\n')
+        pos=i+len(n);count+=1
+        if count>=8: break
+PY
