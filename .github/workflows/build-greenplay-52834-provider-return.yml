@@ -1,0 +1,94 @@
+name: Build GreenPlay 5.28.34 Provider Return Fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52834-provider-return.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Prepare 5.28.34
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/b249a4153e2d626422639dcdc7f3d1439ecda257/uploads/project-20260921-234805-ae4fe1.zip \
+            -o /tmp/base52833.zip
+          rm -rf work && mkdir work
+          unzip -q /tmp/base52833.zip -d work
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('work')
+          ma=root/'app/src/main/java/fun/greenplay/app/MainActivity.java'
+          s=ma.read_text()
+          old='''void cancelProviderSwitch(){
+  providerSwitchScreen=false;
+  shell();
+  if(contentFrame!=null&&mainScroll==homeScrollCache)leaveHomeForPage();
+  profile();
+ }'''
+          new='''void cancelProviderSwitch(){
+  // 5.28.34: voltar/cancelar "Alterar servidor" não pode montar a Home e
+  // imediatamente desmontá-la. O fluxo antigo chamava shell(), que iniciava
+  // home() e seus lotes assíncronos; logo depois profile() incrementava viewGen
+  // e cancelava esses lotes. Ao voltar para Início restavam apenas Destaques/
+  // Adicionados recentemente. Abrimos o shell já direcionado ao Perfil; a Home
+  // permanece vazia até ser realmente solicitada e então é montada inteira do cache.
+  providerSwitchScreen=false;
+  requestedStartNav=4;
+  shell();
+ }'''
+          assert old in s, 'cancelProviderSwitch original not found'
+          s=s.replace(old,new,1)
+          ma.write_text(s)
+
+          bg=root/'app/build.gradle'
+          t=bg.read_text()
+          assert 'versionCode 52833' in t and "versionName '5.28.33'" in t
+          t=t.replace('versionCode 52833','versionCode 52834').replace("versionName '5.28.33'","versionName '5.28.34'")
+          bg.write_text(t)
+
+          out=ma.read_text()
+          assert 'requestedStartNav=4;' in out
+          assert 'if(contentFrame!=null&&mainScroll==homeScrollCache)leaveHomeForPage();\n  profile();' not in out[out.index('void cancelProviderSwitch()'):out.index('void cancelProviderSwitch()')+900]
+          print('GreenPlay 5.28.34 provider-return fix prepared')
+          PY
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile debug
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+      - name: Package source and APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          (cd work && zip -qr ../dist/GreenPlay_Android_Nativo_5_28_52834_CORRIGE_VOLTA_ALTERAR_SERVIDOR.zip .)
+          cp work/app/build/outputs/apk/debug/app-debug.apk dist/GreenPlay_5.28.34_DEBUG.apk
+          ls -lh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.34-provider-return-fix
+          path: dist/*
+          if-no-files-found: error
