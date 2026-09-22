@@ -1,0 +1,81 @@
+name: Build GreenPlay 5.28.37 Memory Safe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52837-memory-safe.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.36 stable source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.36-provider-catalog-stable
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35691860209
+
+      - name: Apply 5.28.37 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip -d work
+          base64 -d inspection/patch52837.py.gz.b64 | gzip -d > /tmp/patch52837.py
+          sed -i "s#root=Path('/mnt/data/gpnext')#root=Path('work')#" /tmp/patch52837.py
+          python3 /tmp/patch52837.py
+          grep -q 'versionCode 52837' work/app/build.gradle
+          ! grep -q '"limit","5000"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q '"full_catalog","1"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q '"all","1"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.37-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52837_MEMORY_SAFE.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52837_MEMORY_SAFE.zip >/dev/null
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.37-memory-safe
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
