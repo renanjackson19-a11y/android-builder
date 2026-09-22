@@ -1,4 +1,4 @@
-name: Build GreenPlay 5.28.45 Strict GreenShorts Filter
+name: Build GreenPlay 5.28.46 Direct GreenShorts
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: 35763748918
 
-      - name: Apply 5.28.45 patch
+      - name: Apply 5.28.45 and 5.28.46 patches
         shell: bash
         run: |
           set -euo pipefail
@@ -66,14 +66,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.45-debug.apk
-          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52845_GREENSHORTS_FILTRO.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.46-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52846_GREENSHORTS_DIRETO.zip . -x '.gradle/*' 'app/build/*' 'build/*')
           unzip -t out/GreenPlay_Android_Nativo_5_28_52845_GREENSHORTS_FILTRO.zip >/dev/null
           ls -lh out
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GreenPlay-5.28.45-greenshorts-filter
+          name: GreenPlay-5.28.46-direct-greenshorts
           path: out/*
           if-no-files-found: error
           retention-days: 30
