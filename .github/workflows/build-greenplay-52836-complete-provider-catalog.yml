@@ -1,0 +1,168 @@
+name: Build GreenPlay 5.28.36 Complete Provider Catalog
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52836-complete-provider-catalog.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Prepare GreenPlay 5.28.36
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/1c647610b6d6863016e9501d5ccc4d1bf482dce0/uploads/project-20260922-001053-d98d13.zip \
+            -o /tmp/base52834.zip
+          rm -rf work && mkdir work
+          unzip -q /tmp/base52834.zip -d work
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root=Path('work')
+          p=root/'app/src/main/java/fun/greenplay/app/MainActivity.java'
+          s=p.read_text()
+
+          # Novo schema por usuário+provedor: não reutiliza snapshots parciais antigos.
+          old='String raw="catalog52809_"+(uid==null?"":uid)+"_"+(Api.PROVIDER==null?"":Api.PROVIDER);return raw.replaceAll("[^A-Za-z0-9._-]","_");'
+          new='String raw="catalog52836_"+(uid==null?"":uid)+"_"+(Api.PROVIDER==null?"":Api.PROVIDER);return raw.replaceAll("[^A-Za-z0-9._-]","_");'
+          if old not in s: raise SystemExit('persistent schema target not found')
+          s=s.replace(old,new,1)
+
+          # Bootstrap nunca pede catálogo ilimitado.
+          s=s.replace('"want_live",wantLive?"1":"0","full_catalog","1"',
+                      '"want_live",wantLive?"1":"0","full_catalog","0"',1)
+
+          # Home: todas as categorias precisam responder. Cada categoria ganha retry.
+          a=s.index(' void fetchHomeCategoriesBatch(int typeId,JSONArray cats,PreparedHomeCB cb){')
+          b=s.index(' void fetchCategoryHomeSection(int typeId,JSONObject cat,int retries,PreparedHomeCB cb){',a)
+          batch=''' void fetchHomeCategoriesBatch(int typeId,JSONArray cats,PreparedHomeCB cb){
+  final int total=cats.length();final JSONObject[] built=new JSONObject[total];
+  for(int i=0;i<total;i++){JSONObject cat=cats.optJSONObject(i);if(cat==null)continue;String cid=cat.optString("category_id",cat.optString("id",""));String title=fixTitle(cat.optString("category_name",cat.optString("name",typeId==2?"Séries":"Filmes")));JSONObject sec=new JSONObject();try{sec.put("title",title);sec.put("category_id",cid);sec.put("type_id",typeId);sec.put("video_type",typeId);sec.put("screen_layout","portrait");sec.put("data",new JSONArray());sec.put("category_complete",0);}catch(Exception ignored){}built[i]=sec;}
+  final int[] next={0},active={0},finished={0},failed={0};final boolean[] delivered={false};final Runnable[] pump=new Runnable[1];
+  pump[0]=()->{
+   if(delivered[0])return;
+   while(active[0]<6&&next[0]<total){final int index=next[0]++;final JSONObject cat=cats.optJSONObject(index);if(cat==null){finished[0]++;continue;}active[0]++;
+    fetchCategoryHomeSection(typeId,cat,2,new PreparedHomeCB(){public void ok(JSONObject part){active[0]--;finished[0]++;JSONArray a=part==null?null:part.optJSONArray("result");if(a!=null&&a.length()>0){JSONObject sec=a.optJSONObject(0);if(sec!=null)built[index]=sec;}pump[0].run();}public void err(String e){active[0]--;finished[0]++;failed[0]++;pump[0].run();}});
+   }
+   if(finished[0]>=total&&active[0]==0&&!delivered[0]){delivered[0]=true;if(failed[0]>0){cb.err("Algumas categorias não responderam; usando catálogo preparado do servidor.");return;}JSONArray sections=new JSONArray();for(JSONObject sec:built)if(sec!=null)sections.put(sec);JSONObject out=homePartFromSections(sections,"direct_categories_atomic");try{out.put(typeId==1?"movie_first_pages_complete":"series_first_pages_complete",1);out.put("category_count",total);}catch(Exception ignored){}cb.ok(out);}
+  };
+  pump[0].run();
+ }
+'''
+          s=s[:a]+batch+s[b:]
+
+          # Categoria aberta: páginas pequenas e retry. Nunca aceita parcial como completo.
+          a=s.index(' Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){')
+          b=s.index(' void storeFullCategoryInHomeCache(int typeId,String categoryId,JSONArray rows){',a)
+          paging=''' int categoryPageSize(){return 250;}
+ Map<String,String> categoryPageArgs(int typeId,String categoryId,int page,int offset){String contentType=typeId==2?"series":"movie";return Api.m("user_id",uid,"type",contentType,"category_id",categoryId,"page_no",String.valueOf(page),"page",String.valueOf(page),"offset",String.valueOf(Math.max(0,offset)),"limit",String.valueOf(categoryPageSize()),"per_page",String.valueOf(categoryPageSize()),"page_size",String.valueOf(categoryPageSize()),"full_catalog","0");}
+ void fetchAllCategoryPagesCancelable(int typeId,String categoryId,int request,AllPagesCB cb){
+  String cid=categoryId==null?"":categoryId.trim();if(cid.isEmpty()){cb.err("Categoria inválida");return;}fetchAllCategoryPagesRawCancelable(typeId,cid,1,new JSONArray(),new java.util.HashSet<String>(),request,0,cb);
+ }
+ void fetchAllCategoryPagesRawCancelable(int typeId,String raw,int page,JSONArray acc,java.util.HashSet<String> seen,int request,int retry,AllPagesCB cb){
+  if(request!=tvBrowserGridGeneration)return;if(page>500){cb.ok(acc);return;}final int offset=(page-1)*categoryPageSize();Api.post("content_by_category",categoryPageArgs(typeId,raw,page,offset),new Api.CB(){public void ok(JSONObject j){
+   if(request!=tvBrowserGridGeneration)return;if(j.optInt("status",200)!=200){if(retry<2){new Handler(Looper.getMainLooper()).postDelayed(()->fetchAllCategoryPagesRawCancelable(typeId,raw,page,acc,seen,request,retry+1,cb),300);return;}cb.err(j.optString("message","Resposta inválida"));return;}
+   int total=categoryResponseTotal(j);JSONArray rows=j.optJSONArray("result");if(rows==null||rows.length()==0){if(j.optBoolean("more_page",false)&&retry<2){new Handler(Looper.getMainLooper()).postDelayed(()->fetchAllCategoryPagesRawCancelable(typeId,raw,page,acc,seen,request,retry+1,cb),300);return;}if(j.optBoolean("more_page",false)){cb.err("Página incompleta");return;}cb.ok(acc);return;}
+   for(int i=0;i<rows.length();i++){JSONObject x=rows.optJSONObject(i);if(x==null)continue;String key=itemKey(x);if(key==null||key.trim().isEmpty())key=x.optString("id",x.optString("video_id",x.optString("name","")))+"|"+x.optString("stream_url",x.optString("url",""));if(seen.add(key))acc.put(x);}
+   boolean more=j.optBoolean("more_page",total>0?acc.length()<total:rows.length()>=categoryPageSize());if(!more||(total>0&&acc.length()>=total)){cb.ok(acc);return;}if(request!=tvBrowserGridGeneration)return;fetchAllCategoryPagesRawCancelable(typeId,raw,page+1,acc,seen,request,0,cb);
+  }public void err(String e){if(request!=tvBrowserGridGeneration)return;if(retry<2){new Handler(Looper.getMainLooper()).postDelayed(()->fetchAllCategoryPagesRawCancelable(typeId,raw,page,acc,seen,request,retry+1,cb),350);return;}cb.err(e);}});
+ }
+ void fetchAllCategoryPages(int typeId,String categoryId,AllPagesCB cb){
+  String cid=categoryId==null?"":categoryId.trim();if(cid.isEmpty()){cb.err("Categoria inválida");return;}fetchAllCategoryPagesRaw(typeId,cid,1,new JSONArray(),new java.util.HashSet<String>(),0,cb);
+ }
+ void fetchAllCategoryPagesRaw(int typeId,String raw,int page,JSONArray acc,java.util.HashSet<String> seen,int retry,AllPagesCB cb){
+  if(page>500){cb.ok(acc);return;}final int offset=(page-1)*categoryPageSize();Api.post("content_by_category",categoryPageArgs(typeId,raw,page,offset),new Api.CB(){public void ok(JSONObject j){
+   if(j.optInt("status",200)!=200){if(retry<2){new Handler(Looper.getMainLooper()).postDelayed(()->fetchAllCategoryPagesRaw(typeId,raw,page,acc,seen,retry+1,cb),300);return;}cb.err(j.optString("message","Resposta inválida"));return;}
+   int total=categoryResponseTotal(j);JSONArray rows=j.optJSONArray("result");if(rows==null||rows.length()==0){if(j.optBoolean("more_page",false)&&retry<2){new Handler(Looper.getMainLooper()).postDelayed(()->fetchAllCategoryPagesRaw(typeId,raw,page,acc,seen,retry+1,cb),300);return;}if(j.optBoolean("more_page",false)){cb.err("Página incompleta");return;}cb.ok(acc);return;}
+   for(int i=0;i<rows.length();i++){JSONObject x=rows.optJSONObject(i);if(x==null)continue;String key=itemKey(x);if(key==null||key.trim().isEmpty())key=x.optString("id",x.optString("video_id",x.optString("name","")))+"|"+x.optString("stream_url",x.optString("url",""));if(seen.add(key))acc.put(x);}
+   boolean more=j.optBoolean("more_page",total>0?acc.length()<total:rows.length()>=categoryPageSize());if(!more||(total>0&&acc.length()>=total)){cb.ok(acc);return;}fetchAllCategoryPagesRaw(typeId,raw,page+1,acc,seen,0,cb);
+  }public void err(String e){if(retry<2){new Handler(Looper.getMainLooper()).postDelayed(()->fetchAllCategoryPagesRaw(typeId,raw,page,acc,seen,retry+1,cb),350);return;}cb.err(e);}});
+ }
+'''
+          s=s[:a]+paging+s[b:]
+
+          # Shorts e listas da Home usam só preview; abrir a categoria pagina até o final.
+          s=s.replace('"limit","5000","per_page","5000","page_size","5000","full_catalog","1"',
+                      '"limit","24","per_page","24","page_size","24","full_catalog","0"')
+          s=s.replace('"limit","5000","per_page","5000","full_catalog","1"',
+                      '"limit","12","per_page","12","full_catalog","0"')
+
+          p.write_text(s)
+
+          b=root/'app/build.gradle'
+          t=b.read_text()
+          if 'versionCode 52834' not in t: raise SystemExit('version target not found')
+          t=t.replace('versionCode 52834','versionCode 52836',1)
+          t=t.replace("versionName '5.28.34'","versionName '5.28.36'",1)
+          b.write_text(t)
+
+          (root/'README_GREENPLAY_5_28_52836.txt').write_text("""GreenPlay 5.28.36
+
+- Cada provedor mantém catálogo e cache separados.
+- A Home exige todas as categorias do provedor; falhas temporárias recebem retry.
+- Categorias grandes usam páginas de 250 itens até total_rows/more_page indicar o fim.
+- Nenhuma categoria é marcada completa quando uma página falha.
+- Não usa limit=5000/full_catalog=1 nas categorias.
+- Novo schema de cache para não reaproveitar snapshots parciais antigos.
+- Mantém o retorno de Perfil/Alterar servidor da 5.28.34.
+""")
+
+          out=p.read_text()
+          assert 'catalog52836_' in out
+          assert 'int categoryPageSize(){return 250;}' in out
+          assert 'fetchCategoryHomeSection(typeId,cat,2' in out
+          assert '"full_catalog","0"' in out
+          assert '"limit","5000"' not in out
+          assert 'versionCode 52836' in b.read_text()
+          print('GreenPlay 5.28.36 preparado')
+          PY
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile debug
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package complete source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk GreenPlay_5.28.36-debug.apk
+          (cd work && zip -qr ../GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip >/dev/null
+          ls -lh GreenPlay_5.28.36-debug.apk GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.36-complete-provider-catalog
+          path: |
+            GreenPlay_5.28.36-debug.apk
+            GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip
+          if-no-files-found: error
+          retention-days: 30
