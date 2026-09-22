@@ -1,0 +1,20 @@
+name: Inspect GreenPlay 5.28.35 Header Fields
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52835-header-fields.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/283c31cdd617927296397d01a10ed785e85220ab/uploads/project-20260922-020307-c4ac1a.zip -o /tmp/p.zip
+          mkdir work && unzip -q /tmp/p.zip -d work
+          sed -n '1,45p' work/app/src/main/java/fun/greenplay/app/MainActivity.java
