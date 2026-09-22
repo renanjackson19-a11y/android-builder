@@ -1,0 +1,90 @@
+name: Validate GreenPlay 5.28.31
+
+on:
+  push:
+    paths:
+      - '.github/workflows/validate-greenplay-52831.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Prepare 5.28.31 project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q uploads/project-20260921-204038-a6a49a.zip -d work
+
+          # First reconstruct the proven 5.28.30 compile fix from the 5.28.29 upload.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=p.read_text()
+          old=''' void renderTvChannelsChunk(LinearLayout host,JSONArray a,int start,int listGen){
+            if(listGen!=tvChannelListGeneration||host==null||host!=tvChannelHost||host.getParent()==null||a==null)return;
+            if(start==0)a=sanitizeLiveChannels(a);tvChannelChunkPending=false;if(start==0)tvCurrentChannels=a;
+            // v16.234 TV/TV Box: a categoria entra COMPLETA. Nada de liberar 16 e criar mais cards durante o D-pad.
+            int chunk=tvMode?Math.max(0,a.length()-start):12;int end=Math.min(a.length(),start+chunk);View previous=host.getChildCount()>0?host.getChildAt(host.getChildCount()-1):null;for(int i=start;i<end;i++){JSONObject x=a.optJSONObject(i);if(x!=null){View card=tvChannelCard(x,i+1);host.addView(card);if(tvMode&&previous!=null)linkTvVertical(previous,card);previous=card;}}if(tvMode&&start==0&&a.length()>0&&tvAutoPlayPending){JSONObject auto=tvFindAutoPlayChannel(a);tvAutoPlayPending=false;if(auto!=null)host.postDelayed(()->{if(listGen==tvChannelListGeneration)playLiveInline(auto);},160);}if(tvMode&&start==0&&host.getChildCount()>0&&tvCategoryHost!=null){View selected=tvPreferredCategoryFocusView();if(selected!=null){if(wideTvUi())linkTvCategoryToFirstChannel();else linkTvHorizontal(selected,host.getChildAt(0));}resetTvChannelListPosition();if(wideTvUi()&&currentNavIndex==2&&!detailOpen){host.postDelayed(()->{if(listGen!=tvChannelListGeneration||host.getChildCount()==0)return;View f=getCurrentFocus();if(f==null||f==liveSearchBox||f==navTv)requestTvFocus(host.getChildAt(0));},120);}}if(!tvMode&&end<a.length())host.postDelayed(()->renderTvChannelsChunk(host,a,end,listGen),16);
+           }'''
+          new=''' void renderTvChannelsChunk(LinearLayout host,JSONArray a,int start,int listGen){
+            if(listGen!=tvChannelListGeneration||host==null||host!=tvChannelHost||host.getParent()==null||a==null)return;
+            final JSONArray rows=(start==0)?sanitizeLiveChannels(a):a;
+            tvChannelChunkPending=false;if(start==0)tvCurrentChannels=rows;
+            // v16.234 TV/TV Box: a categoria entra COMPLETA. Nada de liberar 16 e criar mais cards durante o D-pad.
+            int chunk=tvMode?Math.max(0,rows.length()-start):12;int end=Math.min(rows.length(),start+chunk);View previous=host.getChildCount()>0?host.getChildAt(host.getChildCount()-1):null;for(int i=start;i<end;i++){JSONObject x=rows.optJSONObject(i);if(x!=null){View card=tvChannelCard(x,i+1);host.addView(card);if(tvMode&&previous!=null)linkTvVertical(previous,card);previous=card;}}if(tvMode&&start==0&&rows.length()>0&&tvAutoPlayPending){final JSONObject auto=tvFindAutoPlayChannel(rows);tvAutoPlayPending=false;if(auto!=null)host.postDelayed(()->{if(listGen==tvChannelListGeneration)playLiveInline(auto);},160);}if(tvMode&&start==0&&host.getChildCount()>0&&tvCategoryHost!=null){View selected=tvPreferredCategoryFocusView();if(selected!=null){if(wideTvUi())linkTvCategoryToFirstChannel();else linkTvHorizontal(selected,host.getChildAt(0));}resetTvChannelListPosition();if(wideTvUi()&&currentNavIndex==2&&!detailOpen){host.postDelayed(()->{if(listGen!=tvChannelListGeneration||host.getChildCount()==0)return;View f=getCurrentFocus();if(f==null||f==liveSearchBox||f==navTv)requestTvFocus(host.getChildAt(0));},120);}}if(!tvMode&&end<rows.length())host.postDelayed(()->renderTvChannelsChunk(host,rows,end,listGen),16);
+           }'''
+          if old not in s:
+              raise SystemExit('5.28.30 base fix target not found')
+          s=s.replace(old,new)
+          s=s.replace('public class MainActivity extends Activity{ // GreenPlay 5.28.29','public class MainActivity extends Activity{ // GreenPlay 5.28.30')
+          p.write_text(s)
+          PY
+
+          # Apply the exact local 5.28.30 -> 5.28.31 diff.
+          base64 -d validation/52831/mainactivity.diff.gz.b64 | gzip -d > /tmp/52831.diff
+          sed -i \
+            -e 's#a/mnt/data/MainActivity_52830.java#a/app/src/main/java/fun/greenplay/app/MainActivity.java#g' \
+            -e 's#b/mnt/data/gp52831/app/src/main/java/fun/greenplay/app/MainActivity.java#b/app/src/main/java/fun/greenplay/app/MainActivity.java#g' \
+            /tmp/52831.diff
+          (cd work && patch -p1 --forward --batch < /tmp/52831.diff)
+
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path('work/app/build.gradle')
+          t=b.read_text().replace('versionCode 52829','versionCode 52831').replace("versionName '5.28.29'","versionName '5.28.31'")
+          b.write_text(t)
+          p=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=p.read_text()
+          assert 'GreenPlay 5.28.31' in s
+          assert 'void maybeLoadMoreMobileCategory' in s
+          assert 'atomic_all_categories' in s
+          assert 'Carregando conteúdo completo' not in s
+          print('5.28.31 source prepared:', len(s), 'bytes')
+          PY
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile debug
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
