@@ -1,0 +1,82 @@
+name: Build GreenPlay 5.28.44 GreenShorts Covers
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52844-greenshorts-covers.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.42 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.42-greenshorts-provider
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35706358452
+
+      - name: Apply 5.28.44 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52842_GREENSHORTS_PROVIDER.zip -d work
+          python3 inspection/patch52844.py
+          mkdir -p work/app/src/main/res/drawable-nodpi
+          cp assets/greenshorts_fallback_user.jpg work/app/src/main/res/drawable-nodpi/greenshorts_fallback.jpg
+          test -s work/app/src/main/res/drawable-nodpi/greenshorts_fallback.jpg
+          grep -q 'versionCode 52844' work/app/build.gradle
+          grep -q 'addHomeTopMediaTab(tabs,R.drawable.top_shorts,"Shorts",selected)' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'collectShortsLooseItems' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'loadGreenShortsCover' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.44-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52844_GREENSHORTS_CAPAS.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52844_GREENSHORTS_CAPAS.zip >/dev/null
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.44-greenshorts-covers
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
