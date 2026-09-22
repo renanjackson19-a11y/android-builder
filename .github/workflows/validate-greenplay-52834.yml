@@ -1,0 +1,63 @@
+name: Validate GreenPlay 5.28.34 Home Provider Return
+
+on:
+  push:
+    paths:
+      - '.github/workflows/validate-greenplay-52834.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Prepare 5.28.34
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/b249a4153e2d626422639dcdc7f3d1439ecda257/uploads/project-20260921-234805-ae4fe1.zip \
+            -o /tmp/base.zip
+          rm -rf work && mkdir work
+          unzip -q /tmp/base.zip -d work
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/main/validation/52834/home_provider_return.diff.gz.b64 \
+            -o /tmp/p.b64
+          tr -d '\r\n' < /tmp/p.b64 | base64 -d | gzip -d > /tmp/p.diff
+          sed -i \
+            -e 's#--- /mnt/data/gp52833orig/#--- a/#g' \
+            -e 's#+++ /mnt/data/gp52834/#+++ b/#g' \
+            /tmp/p.diff
+          (cd work && patch -p1 --forward --batch < /tmp/p.diff)
+          python3 - <<'PY'
+          from pathlib import Path
+          m=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java').read_text()
+          g=Path('work/app/build.gradle').read_text()
+          assert 'requestedStartNav=4; // volta direto ao Perfil' in m
+          assert 'boolean cachedHomeHostValid(View host)' in m
+          assert 'versionCode 52834' in g
+          assert "versionName '5.28.34'" in g
+          print('prepared 5.28.34')
+          PY
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile debug
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
