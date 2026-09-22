@@ -1,0 +1,80 @@
+name: Validate GreenPlay 5.28.33 OOM Fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/validate-greenplay-52833-oom.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Prepare fixed 5.28.33
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2             https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/f2bf90a56c3e25a4b0845c18ee57e5c9c0dfddfb/uploads/project-20260921-231456-c5b6b4.zip             -o /tmp/base52832.zip
+          rm -rf work && mkdir work
+          unzip -q /tmp/base52832.zip -d work
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('work')
+          api=root/'app/src/main/java/fun/greenplay/app/Api.java'
+          s=api.read_text()
+          s=s.replace('static final ExecutorService NET=Executors.newFixedThreadPool(16);','static final ExecutorService NET=Executors.newFixedThreadPool(6);')
+          old='static String read(InputStream i)throws Exception{if(i==null)return "{}";BufferedReader r=new BufferedReader(new InputStreamReader(i,StandardCharsets.UTF_8),32768);StringBuilder s=new StringBuilder();char[] buf=new char[32768];int n;while((n=r.read(buf))>0)s.append(buf,0,n);return s.toString();}'
+          new='static String read(InputStream i)throws Exception{if(i==null)return "{}";final int MAX=24*1024*1024;BufferedReader r=new BufferedReader(new InputStreamReader(i,StandardCharsets.UTF_8),32768);StringBuilder s=new StringBuilder(262144);char[] buf=new char[32768];int n;while((n=r.read(buf))>0){if(s.length()+n>MAX)throw new IOException("Resposta do servidor muito grande");s.append(buf,0,n);}return s.toString();}'
+          assert old in s
+          s=s.replace(old,new,1)
+          oldc='}catch(Exception e){String msg=e.getMessage();MAIN.post(()->cb.err(msg));}finally{if(c!=null)c.disconnect();}});}'
+          newc='}catch(OutOfMemoryError oom){try{System.gc();}catch(Throwable ignored){}String msg="Resposta do servidor excedeu a memória do aparelho";MAIN.post(()->cb.err(msg));}catch(Exception e){String msg=e.getMessage();MAIN.post(()->cb.err(msg));}finally{if(c!=null)c.disconnect();}});}'
+          assert oldc in s
+          s=s.replace(oldc,newc,1)
+          api.write_text(s)
+
+          ma=root/'app/src/main/java/fun/greenplay/app/MainActivity.java'
+          s=ma.read_text()
+          assert 'while(active[0]<12&&next[0]<total){' in s
+          s=s.replace('while(active[0]<12&&next[0]<total){','while(active[0]<6&&next[0]<total){',1)
+          olda='Api.post("content_by_category",Api.m("user_id",uid,"type",contentType,"category_id",cid,"page_no","1","page","1","offset","0","limit","5000","per_page","5000","page_size","5000","full_catalog","1"),new Api.CB(){public void ok(JSONObject j){'
+          newa='Api.post("content_by_category",Api.m("user_id",uid,"type",contentType,"category_id",cid,"page_no","1","page","1","offset","0","limit","12","per_page","12","page_size","12","full_catalog","0"),new Api.CB(){public void ok(JSONObject j){'
+          assert olda in s
+          s=s.replace(olda,newa,1)
+          oldcache='void loadPersistentHomeAsync(PersistentHomeCB cb){if(persistentHomeReadPending)return;persistentHomeReadPending=true;final java.io.File f=persistentHomeFile();CATALOG_IO.execute(()->{JSONObject out=null;try{if(f.exists()&&f.length()>64){java.io.InputStream in=new java.util.zip.GZIPInputStream(new java.io.BufferedInputStream(new java.io.FileInputStream(f),32768),32768);java.io.Reader r=new java.io.BufferedReader(new java.io.InputStreamReader(in,java.nio.charset.StandardCharsets.UTF_8),32768);StringBuilder b=new StringBuilder((int)Math.min(4*1024*1024,Math.max(65536,f.length()*3)));char[] c=new char[32768];int n;while((n=r.read(c))>0)b.append(c,0,n);r.close();out=new JSONObject(b.toString());}}catch(Throwable e){try{f.delete();}catch(Exception ignored){}}final JSONObject ready=out;runOnUiThread(()->{persistentHomeReadPending=false;if(ready!=null)cb.ok(ready);else cb.miss();});});}'
+          newcache='void loadPersistentHomeAsync(PersistentHomeCB cb){if(persistentHomeReadPending)return;persistentHomeReadPending=true;final java.io.File f=persistentHomeFile();CATALOG_IO.execute(()->{JSONObject out=null;try{if(f.exists()&&f.length()>64){java.io.InputStream in=new java.util.zip.GZIPInputStream(new java.io.BufferedInputStream(new java.io.FileInputStream(f),32768),32768);java.io.Reader r=new java.io.BufferedReader(new java.io.InputStreamReader(in,java.nio.charset.StandardCharsets.UTF_8),32768);final int maxChars=24*1024*1024;StringBuilder b=new StringBuilder((int)Math.min(2*1024*1024,Math.max(65536,f.length()*3)));char[] c=new char[32768];int n;while((n=r.read(c))>0){if(b.length()+n>maxChars)throw new java.io.IOException("cache antigo muito grande");b.append(c,0,n);}r.close();out=new JSONObject(b.toString());}}catch(Throwable e){try{f.delete();}catch(Exception ignored){}}final JSONObject ready=out;runOnUiThread(()->{persistentHomeReadPending=false;if(ready!=null)cb.ok(ready);else cb.miss();});});}'
+          assert oldcache in s
+          s=s.replace(oldcache,newcache,1)
+          ma.write_text(s)
+
+          bg=root/'app/build.gradle'
+          t=bg.read_text().replace('versionCode 52832','versionCode 52833').replace("versionName '5.28.32'","versionName '5.28.33'")
+          bg.write_text(t)
+          assert 'versionCode 52833' in t
+          assert '"limit","12"' in ma.read_text()
+          assert 'newFixedThreadPool(6)' in api.read_text()
+          print('prepared 5.28.33')
+          PY
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile debug
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
