@@ -1,0 +1,29 @@
+name: Inspect GreenPlay 5.28.32 OOM
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52832-oom.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/f2bf90a56c3e25a4b0845c18ee57e5c9c0dfddfb/uploads/project-20260921-231456-c5b6b4.zip \
+            -o /tmp/base52832.zip
+          rm -rf work && mkdir work
+          unzip -q /tmp/base52832.zip -d work
+          echo '===== API.JAVA ====='
+          sed -n '1,220p' work/app/src/main/java/fun/greenplay/app/Api.java
+          echo '===== MAIN OOM RELATED ====='
+          grep -nE "bootstrap_home|content_by_category|full_catalog|limit=|page_no|atomic_all_categories|prepare|sync|Sincron|home" work/app/src/main/java/fun/greenplay/app/MainActivity.java | head -n 260
+          echo '===== API CALL SITES ====='
+          grep -n "Api\.post\|Api\.get" work/app/src/main/java/fun/greenplay/app/MainActivity.java | head -n 220
