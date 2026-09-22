@@ -1,0 +1,79 @@
+name: Build GreenPlay 5.28.38 Pagination Counts
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52838-pagination-counts.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.37 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.37-memory-safe
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35693137251
+
+      - name: Apply 5.28.38 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52837_MEMORY_SAFE.zip -d work
+          python3 inspection/patch52838.py
+          grep -q 'versionCode 52838' work/app/build.gradle
+          ! grep -q '"limit","5000"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q '"full_catalog","1"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q '"full_catalog","0","all","1"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd work
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.38-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52838_PAGINACAO_CONTAGEM.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52838_PAGINACAO_CONTAGEM.zip >/dev/null
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.38-pagination-counts
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
