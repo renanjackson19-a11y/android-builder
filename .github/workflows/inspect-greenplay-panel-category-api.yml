@@ -1,0 +1,33 @@
+name: Inspect GreenPlay panel category API
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-panel-category-api.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract panel source and inspect category API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP=uploads/project-20260918-205101-514dce.zip
+          test -f "$ZIP"
+          rm -rf /tmp/panel && mkdir /tmp/panel
+          unzip -q "$ZIP" -d /tmp/panel
+          echo '=== files matching content_by_category ==='
+          grep -RIl --exclude='*.apk' --exclude='*.jar' --exclude='*.zip' 'content_by_category' /tmp/panel | head -50 || true
+          echo '=== likely dtlive api files ==='
+          find /tmp/panel -type f | grep -Ei '/api/|dtlive|content_by_category|get_category' | head -100 || true
+          echo '=== excerpts ==='
+          while IFS= read -r f; do
+            echo "----- $f -----"
+            grep -n -B 30 -A 120 'content_by_category' "$f" | head -220 || true
+          done < <(grep -RIl --exclude='*.apk' --exclude='*.jar' --exclude='*.zip' 'content_by_category' /tmp/panel | head -10)
