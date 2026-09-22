@@ -120,8 +120,7 @@ public class YouTubePlayerActivity extends Activity {
     final Runnable poll=new Runnable(){public void run(){
         if(web!=null)web.evaluateJavascript("javascript:gpTime()",v->{
             try{
-                if(v==null)return;String z=v.replace("\"","").replace(""","");String[] a=z.split("\\|");
-                if(a.length<3)return;double cur=Double.parseDouble(a[0]),dur=Double.parseDouble(a[1]);int st=(int)Double.parseDouble(a[2]);
+                if(v==null)return;String z=v;if(z.length()>=2&&z.charAt(0)==34&&z.charAt(z.length()-1)==34)z=z.substring(1,z.length()-1);String[] a=z.split("\\|");\n                if(a.length<3)return;double cur=Double.parseDouble(a[0]),dur=Double.parseDouble(a[1]);int st=(int)Double.parseDouble(a[2]);
                 timeView.setText(fmt(cur));durationView.setText(fmt(dur));playBtn.setText(st==1?"❚❚":"▶");
                 if(!userSeeking&&dur>0)seek.setProgress((int)Math.max(0,Math.min(1000,(cur/dur)*1000)));
             }catch(Exception ignored){}
