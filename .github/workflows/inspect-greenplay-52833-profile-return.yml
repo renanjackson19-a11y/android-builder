@@ -1,0 +1,31 @@
+name: Inspect GreenPlay 5.28.33 Profile Return
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52833-profile-return.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/b249a4153e2d626422639dcdc7f3d1439ecda257/uploads/project-20260921-234805-ae4fe1.zip \
+            -o /tmp/p.zip
+          rm -rf work && mkdir work
+          unzip -q /tmp/p.zip -d work
+          F=work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          echo '===== MATCHES ====='
+          grep -nE "navProfile|Perfil|profile|showProfile|renderHome|showHome|homeSections|sections|recent|Adicionados recentemente|currentNavIndex|setContentView|homeRoot|buildHome|loadHome|bootstrapHome|homeData|homeJson|clear" "$F" | head -n 420
+          echo '===== NAVIGATION AREA ====='
+          sed -n '220,430p' "$F"
+          echo '===== HOME LOADER ====='
+          sed -n '430,820p' "$F"
+          echo '===== PROFILE / NAV ====='
+          grep -nE "void .*Profile|void .*Home|setOnClickListener.*nav|navProfile|navHome|currentNavIndex" "$F" | tail -n 220
