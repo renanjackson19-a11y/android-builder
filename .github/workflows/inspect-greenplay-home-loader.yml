@@ -1,0 +1,23 @@
+name: Inspect GreenPlay 5.28.32 Home Loader
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-home-loader.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/f2bf90a56c3e25a4b0845c18ee57e5c9c0dfddfb/uploads/project-20260921-231456-c5b6b4.zip -o /tmp/p.zip
+          mkdir work && unzip -q /tmp/p.zip -d work
+          echo '===== HOME LOADER 350-680 ====='
+          sed -n '350,680p' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          echo '===== PERSISTENT CACHE 680-780 ====='
+          sed -n '680,780p' work/app/src/main/java/fun/greenplay/app/MainActivity.java
