@@ -1,0 +1,19 @@
+name: Inspect 5.28.34 Patch Text
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-52834-patch-text.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL https://raw.githubusercontent.com/renanjackson19-a11y/android-builder/main/validation/52834/home_provider_return.diff.gz.b64 -o /tmp/p.b64
+          tr -d '\r\n' < /tmp/p.b64 | base64 -d | gzip -d
