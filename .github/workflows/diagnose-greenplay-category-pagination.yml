@@ -1,0 +1,56 @@
+name: Diagnose GreenPlay category pagination
+
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnose-greenplay-category-pagination.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.36-provider-catalog-stable
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35691860209
+
+      - name: Probe API pagination
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52836_CATALOGO_COMPLETO_POR_PROVEDOR.zip -d work
+          API=work/app/src/main/java/fun/greenplay/app/Api.java
+          BASE=$(sed -n 's/.*BASE="\([^"]*\)".*/\1/p' "$API" | head -1)
+          TOKEN=$(sed -n 's/.*TOKEN="\([^"]*\)".*/\1/p' "$API" | head -1)
+          PROVIDER=pmubtjgd6vfeo
+          H=(-H "Api-Token: $TOKEN" -H "X-GreenPlay-Key: $TOKEN" -H "Provider-Id: $PROVIDER" -H "Content-Type: application/json")
+          post() { curl -fsS --max-time 20 "${H[@]}" -X POST "$1?provider_id=$PROVIDER" --data "$2"; }
+
+          post "${BASE}get_category/" '{"type":"movie","provider_id":"'"$PROVIDER"'"}' > /tmp/cats.json || true
+          echo "category_status=$(jq -r '.status // "none"' /tmp/cats.json 2>/dev/null || echo parse_error)"
+          jq -r '.result[]? | [(.category_id // .id // ""),(.category_name // .name // "")] | @tsv' /tmp/cats.json |
+            grep -Ei 'terror|reels|short|adult|xxx' | head -20 || true
+
+          CID=$(jq -r '.result[]? | select(((.category_name // .name // "")|ascii_downcase|contains("terror"))) | (.category_id // .id)' /tmp/cats.json | head -1)
+          [ -n "$CID" ] && [ "$CID" != "null" ] || CID=$(jq -r '.result[0]? | (.category_id // .id // "")' /tmp/cats.json)
+          echo "probe_category=$CID"
+          [ -n "$CID" ] || exit 0
+
+          probe() {
+            label="$1"; payload="$2"
+            post "${BASE}content_by_category/" "$payload" > "/tmp/$label.json" || true
+            echo -n "$label "
+            jq -c '{status,total_rows,total,total_count,more_page,result_count:(.result|length),first_ids:[.result[0:3][]? | (.id // .video_id // .stream_id // .name // .title)]}' "/tmp/$label.json" 2>/dev/null || echo parse_error
+          }
+
+          probe p1 '{"type":"movie","category_id":"'"$CID"'","provider_id":"'"$PROVIDER"'","page":"1","page_no":"1","offset":"0","limit":"5","per_page":"5","page_size":"5","full_catalog":"0"}'
+          probe p2 '{"type":"movie","category_id":"'"$CID"'","provider_id":"'"$PROVIDER"'","page":"2","page_no":"2","offset":"5","limit":"5","per_page":"5","page_size":"5","full_catalog":"0"}'
+          probe start '{"type":"movie","category_id":"'"$CID"'","provider_id":"'"$PROVIDER"'","page":"2","page_no":"2","offset":"5","start":"5","length":"5","limit":"5","per_page":"5","page_size":"5","full_catalog":"0"}'
+          probe skip '{"type":"movie","category_id":"'"$CID"'","provider_id":"'"$PROVIDER"'","page":"2","page_no":"2","offset":"5","skip":"5","from":"5","start_index":"5","limit":"5","per_page":"5","page_size":"5","full_catalog":"0"}'
