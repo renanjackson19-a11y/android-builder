@@ -1,0 +1,31 @@
+name: Espaco2 4.0.2 artifact transfer
+
+on:
+  push:
+    paths:
+      - '.github/workflows/espaco2-transfer-402.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download APK from build server
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --max-time 180 \
+            "https://greenplay.fun/Espaco_2_4.0.2_MULTI_FOTO_ANR_FIX.apk" \
+            -o Espaco_2_4.0.2_MULTI_FOTO_ANR_FIX.apk
+          test -s Espaco_2_4.0.2_MULTI_FOTO_ANR_FIX.apk
+          sha256sum Espaco_2_4.0.2_MULTI_FOTO_ANR_FIX.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: espaco2-4.0.2-apk
+          path: Espaco_2_4.0.2_MULTI_FOTO_ANR_FIX.apk
+          compression-level: 0
+          retention-days: 1
