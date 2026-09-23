@@ -103,3 +103,5 @@ jobs:
           retention-days: 30
 
 # retry after patch-anchor fix
+
+# retry after lint manifest fix
