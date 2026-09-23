@@ -1,0 +1,45 @@
+name: Inspect GreenPlay 5.28.66 Provider Methods
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52866-provider-methods.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.66-universal-stream-formats
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35819940050
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52866_UNIVERSAL_STREAM_FORMATS.zip -d work
+          {
+            echo '=== 430-540 ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '430,540p'
+            echo
+            echo '=== 640-760 ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '640,760p'
+            echo
+            echo '=== 2860-2910 ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '2860,2910p'
+            echo
+            echo '=== CACHE METHODS ==='
+            grep -n -E 'clearPreparedHome|homeCache|providerCache|clear.*Cache|saveHomeCache|loadHomeCache|provider_live_count|provider_movies_count|provider_series_count' work/app/src/main/java/fun/greenplay/app/MainActivity.java || true
+          } > inspection/provider_methods_52866.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/provider_methods_52866.txt
+          git commit -m "Inspect provider methods 5.28.66" || exit 0
+          git push
