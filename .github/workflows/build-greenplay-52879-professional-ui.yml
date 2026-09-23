@@ -1,0 +1,100 @@
+name: Build GreenPlay 5.28.79 Professional UI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52879-professional-ui.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.78 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.78-provider-picker-back
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35901278183
+
+      - name: Apply professional UI patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out apkcheck
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52878_SERVER_BACK.zip -d work
+          python3 inspection/patch52879_professional_servers_channel_loading.py
+
+          grep -q 'versionCode 52879' work/app/build.gradle
+          grep -q "versionName '5.28.79'" work/app/build.gradle
+          grep -q 'providerChoiceChip' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'EM USO' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'buildTvPreviewPlaceholder' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'CONECTANDO AO VIVO' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'tvPreviewLoadingProgress' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q 'Carregando canal...' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=work/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          mkdir -p apkcheck
+          unzip -q "$APK" 'classes*.dex' -d apkcheck
+          if find apkcheck -name 'classes*.dex' -print0 | xargs -0 strings -a | grep -Fq '454946ee403e82a9657eafc76091ccb6d8ccd4a8fadfca45'; then
+            echo 'Plain API token leaked into DEX' >&2
+            exit 1
+          fi
+          if find apkcheck -name 'classes*.dex' -print0 | xargs -0 strings -a | grep -Eqi 'greenplay-media-proxy|/media/p/|:8770'; then
+            echo 'Relay reference found in APK' >&2
+            exit 1
+          fi
+          if command -v apkanalyzer >/dev/null 2>&1; then
+            apkanalyzer manifest debuggable "$APK" | tee /tmp/debuggable.txt
+            ! grep -qi '^true$' /tmp/debuggable.txt
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.79-PRO-UI.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52879_PRO_UI.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52879_PRO_UI.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.79-professional-ui
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
