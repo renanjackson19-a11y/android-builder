@@ -1,0 +1,64 @@
+name: Build GreenPlay 5.28.60 Mobile Scroll Top
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52860-mobile-scroll-top.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download 5.28.59 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.59-tv-player-no-jump
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35798086500
+      - name: Patch source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52859_TV_PLAYER_NO_JUMP.zip -d work
+          python3 inspection/patch52860_mobile_scroll_top.py
+          grep -q 'versionCode 52860' work/app/build.gradle
+          grep -q 'Voltar ao topo' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'bindScrollTopButton' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.60-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52860_SCROLL_TOP.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52860_SCROLL_TOP.zip >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.60-mobile-scroll-top
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
