@@ -1,0 +1,42 @@
+name: Inspect GreenPlay 5.28.62 Player
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52862-player.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download 5.28.62 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.62-cast-hotfix
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35803127224
+      - name: Extract player snippets
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52862_CAST_HOTFIX.zip -d work
+          {
+            echo '=== FILES ==='
+            grep -RIl -E 'Carregando canal|ExoPlayer|MediaItem|HlsMediaSource|ProgressiveMediaSource|PlayerView|MediaSource' work/app/src/main/java || true
+            echo
+            echo '=== MATCHES ==='
+            grep -RIn -E 'Carregando canal|ExoPlayer|MediaItem|HlsMediaSource|ProgressiveMediaSource|PlayerView|MediaSource|video_320|setMediaItem|prepare\(' work/app/src/main/java || true
+          } > inspection/player52862.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/player52862.txt
+          git commit -m "Inspect 5.28.62 live player" || exit 0
+          git push
