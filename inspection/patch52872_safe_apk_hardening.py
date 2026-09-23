@@ -105,7 +105,7 @@ final class SecurityGuard{
 p=root/"app/src/main/AndroidManifest.xml"
 s=p.read_text()
 old='android:usesCleartextTraffic="true" android:allowBackup="false" android:extractNativeLibs="true"'
-new='android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/network_security_config" android:debuggable="false" android:allowBackup="false" android:extractNativeLibs="true"'
+new='android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/network_security_config" android:allowBackup="false" android:extractNativeLibs="true"'
 assert old in s
 s=s.replace(old,new,1)
 s=s.replace('<activity android:name=".PlayerActivity" ', '<activity android:name=".PlayerActivity" android:exported="false" ',1)
