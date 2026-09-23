@@ -128,8 +128,8 @@ xml.write_text('''<?xml version="1.0" encoding="utf-8"?>
 
 p=root/"app/src/main/java/fun/greenplay/app/CastHelper.java"
 s=p.read_text()
-s=s.replace('   android.util.Log.e("GreenPlayCast","Falha ao abrir Google Cast",e);\\n','')
-s=s.replace('   android.util.Log.e("GreenPlayCast","Google Cast indisponivel",e);\\n','')
+s=s.replace('   android.util.Log.e("GreenPlayCast","Falha ao abrir Google Cast",e);\n','')
+s=s.replace('   android.util.Log.e("GreenPlayCast","Google Cast indisponivel",e);\n','')
 p.write_text(s)
 
 p=root/"app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java"
@@ -163,10 +163,10 @@ s=s.replace(old,new,1)
 
 anchor='void rememberPlayerReturnState(){playerRoundTrip=true;playerReturnScroll=mainScroll;playerReturnBody=body;playerReturnY=mainScroll==null?0:mainScroll.getScrollY();playerReturnNav=currentNavIndex;playerReturnTab=activeHomeTab==null?"":activeHomeTab;}'
 assert anchor in s
-s=s.replace(anchor,'boolean blockTamperedPlayback(){if(!SecurityGuard.tamperRisk())return false;showAppNotice("Ambiente de depuração ou instrumentação detectado.",true);return true;}\\n '+anchor,1)
-old='void playLiveInlineAllowed(JSONObject x){\\n  if(x!=null){'
+s=s.replace(anchor,'boolean blockTamperedPlayback(){if(!SecurityGuard.tamperRisk())return false;showAppNotice("Ambiente de depuração ou instrumentação detectado.",true);return true;}\n '+anchor,1)
+old='void playLiveInlineAllowed(JSONObject x){\n  if(x!=null){'
 assert old in s
-s=s.replace(old,'void playLiveInlineAllowed(JSONObject x){\\n  if(blockTamperedPlayback())return;\\n  if(x!=null){',1)
+s=s.replace(old,'void playLiveInlineAllowed(JSONObject x){\n  if(blockTamperedPlayback())return;\n  if(x!=null){',1)
 old='void launchOnlinePlayer(Intent in){if(in!=null&&!tvMode&&CastHelper.isConnected(this)){'
 assert old in s
 s=s.replace(old,'void launchOnlinePlayer(Intent in){if(blockTamperedPlayback())return;if(in!=null&&!tvMode&&CastHelper.isConnected(this)){',1)
