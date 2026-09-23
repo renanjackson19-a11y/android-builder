@@ -1,0 +1,340 @@
+=== MAIN TOP ===
+     1	package fun.greenplay.app;
+     2	import android.app.*;import android.os.*;import android.content.*;import android.graphics.Color;import android.graphics.drawable.*;import android.net.Uri;import android.text.InputType;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;
+     3	public class MainActivity extends Activity{ // GreenPlay 5.28.37
+     4	 interface PreparedHomeCB{void ok(JSONObject j);void err(String e);} interface DetailPrepareCB{void done(JSONObject d);} interface LiveProbeCB{void done(boolean hasLive,boolean known,JSONArray sample);} interface ScreenResolveCB{void done(int used,int total);}
+     5	 static final int REQ_PROFILE_PHOTO=8601; static final int TAG_SKIP_TV_FOCUS_FX=0x4f120001; static final int TAG_EPG_LOADING=0x4f120002; static final int TAG_SCROLL_TOP_INSTALLED=0x4f120003; int GREEN=Color.rgb(32,224,112); final int BG=Color.rgb(7,17,12),CARD=Color.rgb(16,32,24); LinearLayout root,body,navBar,continueHost,detailNavOverlay; boolean tvMode=false; java.util.WeakHashMap<View,Boolean> tvFocusArmed=new java.util.WeakHashMap<>(); FrameLayout contentFrame; ScrollView mainScroll,savedScroll,homeScrollCache,sectionParentScroll; LinearLayout savedBody,homeBodyCache,tvPageRoot,sectionParentBody; ImageView homeHeaderLogo,tvEpgLogo; TextView homeHeaderBrandFallback; int homeScrollY=0,sectionParentScrollY=0,sectionParentViewGen=0; boolean homeViewAvailable=false,sectionPageOpen=false; String sectionReturnTab=""; TextView navHome,navFav,navTv,navFootball,navMovies,navSeries,navShorts,navKids,navDownloads,navProfile,scrollTopButton; ScrollView scrollTopHost; ImageView globalCastButton; android.content.SharedPreferences sp; String uid="",reseller="",appName="GreenPlay",logoUrl="",bgUrl=""; boolean authScreen=false,detailOpen=false,searchScreenOpen=false,exitDialogOpen=false,providerSwitchScreen=false,plansScreen=false,providerAvailabilityCheckBusy=false; long providerAvailabilityLastCheck=0; int liveOffset=0,currentNavIndex=0,savedNavIndex=0,savedViewGen=0,requestedStartNav=-1; String liveSearch="",activeHomeTab="Recomendações",homeCachedTab="",tvPendingCategoryHint=""; LinearLayout liveListHost,tvCategoryHost,tvChannelHost,tvPreviewPlaceholder; TextView liveState,tvPreviewTitle,tvPreviewSubtitle,tvNowPlaying,tvEpgNow,tvEpgNext,tvSoundButton,tvCastButton,tvFullButton; EditText liveSearchBox; String tvSelectedCategory=""; int tvFocusedCategoryIndex=-1; FrameLayout tvPreviewFrame; ImageView tvVideoBackdrop; androidx.media3.ui.PlayerView tvInlinePlayerView; androidx.media3.exoplayer.ExoPlayer tvInlinePlayer; int tvVideoWidth=0,tvVideoHeight=0; float tvVideoPixelRatio=1f; boolean tvBackdropCapturePending=false; Runnable tvBackdropBeat; JSONObject tvActiveChannel; ScrollView tvCategoryScroll,tvChannelScroll; HorizontalScrollView tvCategoryRail; View tvTopBar,tvTabsBar,tvPanesView,tvWideLeftPanel; LinearLayout tvWideSplit; boolean tvCinemaMode=false,tvCinemaDrawerOpen=false; boolean tvInlineMuted=false,tvInlinePrepared=false,tvInlineSessionHeld=false,tvInlineSessionAcquiring=false,tvResumeAfterFullscreen=false,tvInlineFullscreen=false,tvInlineSwitching=false,tvResumeAfterBackground=false,tvOrientationTransition=false,tvUiTransitioning=false,tvAutoPlayPending=false; int tvInlineSourceIndex=0,tvInlineFormatAttemptIndex=-1,tvInlineFormatAttemptMask=0,tvInlineFormatMode=0,tvInlineBufferStarts=0,tvSavedScrollY=0,tvEpgRequestToken=0,tvInlineRecoveryCount=0; long tvInlineLastBufferAt=0,tvBackgroundAt=0,tvInlineBufferingSince=0,tvInlineLastPosition=-1,tvInlineLastAdvanceAt=0; java.util.ArrayList<String> tvInlineSources=new java.util.ArrayList<>(); Handler tvInlineHandler=new Handler(Looper.getMainLooper()); Runnable tvInlineBeat,tvInlinePendingAcquire,tvEpgBeat,tvInlineWatchdog,tvEpgHide; View tvEpgOverlay; ViewGroup tvPreviewHomeParent; ViewGroup.LayoutParams tvPreviewHomeLayoutParams; int tvPreviewHomeIndex=-1; int viewGen=0; int featuredShuffleTick=0; boolean homeExtrasStarted=false; boolean sessionHasLive=false,sessionLiveKnown=false,planLiveAllowed=true,planAdultAllowed=true; int planScreens=1; String activePlanName=""; int planFlowStage=0; android.os.CountDownTimer pixTimer=null; static JSONObject preparedHomeData=null; static String preparedHomeProvider=""; java.util.HashMap<String,String> detailMemoryCache=new java.util.HashMap<>(); java.util.ArrayDeque<JSONObject> detailPrefetchQueue=new java.util.ArrayDeque<>(); java.util.HashSet<String> detailPrefetchKeys=new java.util.HashSet<>(); int detailPrefetchActive=0; boolean detailPreparing=false; View detailPrepareOverlay,accessExpiredOverlay; LinearLayout activeSeriesResumeHost; JSONObject activeSeriesDetail,activeSeriesSource; boolean modeSwitchPending=false,modeSwitchTargetTv=false,modeSwitchOrientationReady=false,modeSwitchImagesReady=false,modeReloadScreen=false; JSONObject modeSwitchCache=null; final Handler modeSwitchHandler=new Handler(Looper.getMainLooper()); Runnable modeSwitchFallback=null; JSONArray modeReadyFeatured=null; ProgressBar modeTransitionProgress=null; TextView modeTransitionPercent=null,modeTransitionStatus=null,modeTransitionDetail=null; Runnable tvQueuedChannelSwitch=null; JSONObject tvQueuedChannel=null; int tvChannelSwitchGeneration=0,tvPlaybackGeneration=0; JSONArray tvCurrentChannels=new JSONArray(); FrameLayout tvFullscreenChannelOverlay=null; HorizontalScrollView tvFullscreenChannelScroll=null; LinearLayout tvFullscreenChannelRow=null; boolean tvFullscreenChannelOverlayVisible=false; int tvFullscreenOverlayIndex=-1; Runnable tvFullscreenOverlayHide=null; long tvFullscreenLastNavAt=0; int tvChannelListGeneration=0,tvBrowserGridGeneration=0; Runnable tvChannelRefreshTask=null; boolean tvChannelChunkPending=false; GridLayout tvShortsGrid=null; int tvShortsCardW=0,tvShortsGridGen=0; ScrollView tvCatalogGridScroll=null; GridLayout tvCatalogGrid=null; androidx.recyclerview.widget.RecyclerView tvCatalogRecycler=null; TextView tvCatalogState=null; TvCatalogAdapter tvCatalogAdapter=null; JSONArray tvCatalogRows=new JSONArray(); int tvCatalogNextIndex=0,tvCatalogCols=6,tvCatalogCardW=0,tvCatalogImgH=0,tvCatalogGap=0,tvCatalogRenderRequest=0; boolean tvCatalogChunkPending=false; final Handler tvHeaderNavHandler=new Handler(Looper.getMainLooper()); boolean tvHeaderNavBusy=false; Runnable tvHeaderNavUnlock=null;
+     6	 interface AllPagesCB{void ok(JSONArray rows);void err(String error);}
+     7	 interface PersistentHomeCB{void ok(JSONObject j);void miss();}
+     8	 static final long HOME_INACTIVITY_RESYNC_MS=72L*60L*60L*1000L;
+     9	 static final long HOME_BACKGROUND_REFRESH_MS=12L*60L*60L*1000L;
+    10	 static final java.util.concurrent.ExecutorService CATALOG_IO=java.util.concurrent.Executors.newSingleThreadExecutor();
+    11	 boolean persistentHomeReadPending=false; boolean catalogPrefetchBusy=false,catalogTabPrepareBusy=false; String catalogTabPending=""; long catalogPrefetchAt=0L; GridLayout mobileCategoryGrid=null; JSONArray mobileCategoryRows=new JSONArray(); int mobileCategoryNextIndex=0,mobileCategoryCardW=0,mobileCategoryGen=0; boolean mobileCategoryChunkPending=false; int mobileCategoryTypeId=0,mobileCategoryNextPageNo=1,mobileCategoryNetworkTotal=0,mobileCategoryNetworkRetries=0; String mobileCategoryId=""; boolean mobileCategoryNetworkBusy=false,mobileCategoryNetworkDone=false,mobileCategoryGreenShorts=false; java.util.HashSet<String> mobileCategorySeen=new java.util.HashSet<>(); LinearLayout mobileCategoryLoadingFooter=null; TextView mobileCategoryLoadingText=null; ProgressBar mobileCategoryLoadingProgress=null;
+    12	 final java.util.HashMap<String,String[]> tvEpgCache=new java.util.HashMap<>(); final java.util.HashMap<String,Long> tvEpgCacheAt=new java.util.HashMap<>(); static final long TV_EPG_CACHE_MS=50000L;
+    13	 boolean playerRoundTrip=false; ScrollView playerReturnScroll=null; LinearLayout playerReturnBody=null; int playerReturnY=0,playerReturnNav=0; String playerReturnTab="";
+    14	 public void onCreate(Bundle b){super.onCreate(b);sp=getSharedPreferences("gp",0);tvMode=DeviceCompat.isTelevisionDevice(this)||sp.getBoolean("force_tv_mode",false);requestedStartNav=getIntent()!=null?getIntent().getIntExtra("gp_restore_nav",-1):-1;configureWindowForCurrentMode();migrateLegacyOfflineDownloads();uid=sp.getString("uid","");reseller=sp.getString("reseller","");Api.PROVIDER=sp.getString("provider_id","");loadIdentityCache();boolean modeChange=getIntent()!=null&&getIntent().getBooleanExtra("gp_mode_change",false);boolean hardModeReload=getIntent()!=null&&getIntent().getBooleanExtra("gp_hard_mode_reload",false);if(uid.isEmpty())login();else if(hardModeReload)startAfterHardModeReload();else if(modeChange)startAfterModeChange();else startExistingSession();refreshIdentity();new Handler(Looper.getMainLooper()).postDelayed(()->{if(!isFinishing())AppUpdater.check(this);},2500);}
+    15	 @Override protected void onResume(){super.onResume();AppUpdater.resumeInstall(this);new Handler(Looper.getMainLooper()).postDelayed(()->{if(!isFinishing())AppUpdater.check(this);},900);new Handler(Looper.getMainLooper()).postDelayed(()->{if(!isFinishing())checkCurrentProviderAvailability(false);},1400);if(tvMode&&!modeSwitchPending)enterTvImmersiveUi();if(!wideTvUi())enforceGlobalBottomNav();updateGlobalCastButtonState();if(detailOpen&&activeSeriesResumeHost!=null&&activeSeriesDetail!=null)renderSeriesResume(activeSeriesSource,activeSeriesDetail,activeSeriesResumeHost);if(tvResumeAfterFullscreen){tvResumeAfterFullscreen=false;}if(tvResumeAfterBackground&&!tvOrientationTransition&&tvInlinePlayer!=null&&tvActiveChannel!=null){tvResumeAfterBackground=false;resumeTvAtLiveEdge();}if(playerRoundTrip)new Handler(Looper.getMainLooper()).postDelayed(()->restorePlayerReturnState(),60);}
+    16	 @Override protected void onPause(){try{if(!tvOrientationTransition){tvResumeAfterBackground=tvInlinePlayer!=null&&tvActiveChannel!=null;tvBackgroundAt=android.os.SystemClock.elapsedRealtime();if(tvInlinePlayer!=null)tvInlinePlayer.pause();}}catch(Exception ignored){}super.onPause();}
+    17	 @Override protected void onStop(){try{if(!tvOrientationTransition&&tvInlinePlayer!=null)tvInlinePlayer.pause();}catch(Exception ignored){}super.onStop();}
+    18	 @Override protected void onDestroy(){try{destroyTvInlinePlayer();}catch(Exception ignored){}try{getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}catch(Exception ignored){}super.onDestroy();}
+    19	 @Override public void onLowMemory(){super.onLowMemory();if(!modeSwitchPending)trimGreenPlayMemory(true);}
+    20	 @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(!modeSwitchPending&&level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)trimGreenPlayMemory(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL);}
+    21	 void trimGreenPlayMemory(boolean aggressive){try{if(Img.MEM!=null)Img.MEM.trimToSize(aggressive?4*1024:10*1024);}catch(Exception ignored){}try{detailMemoryCache.clear();detailPrefetchQueue.clear();detailPrefetchKeys.clear();}catch(Exception ignored){}if(aggressive&&currentNavIndex==2){try{if(homeScrollCache!=null&&homeScrollCache.getParent()==null){homeScrollCache.removeAllViews();homeScrollCache=null;homeBodyCache=null;homeViewAvailable=false;homeScrollY=0;}}catch(Exception ignored){}}}
+    22	
+    23	 void configureWindowForCurrentMode(){
+    24	  try{getWindow().setBackgroundDrawable(new ColorDrawable(BG));getWindow().getDecorView().setBackgroundColor(BG);}catch(Exception ignored){}
+    25	  try{setRequestedOrientation(tvMode?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE:android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);}catch(Exception ignored){}
+    26	  try{
+    27	   if(tvMode){getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);enterTvImmersiveUi();}
+    28	   else{
+    29	    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON|WindowManager.LayoutParams.FLAG_FULLSCREEN);
+    30	    try{getWindow().setStatusBarColor(Color.BLACK);}catch(Exception ignored2){}
+    31	    try{getWindow().setNavigationBarColor(BG);}catch(Exception ignored2){}
+    32	    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    33	   }
+    34	  }catch(Exception ignored){}
+    35	 }
+    36	 void startAfterHardModeReload(){
+    37	  // v16.195: troca de modo se comporta como fechar e abrir o aplicativo.
+    38	  // A tela de recarga aparece primeiro; a nova Home só é montada quando o
+    39	  // snapshot já foi restaurado e as capas críticas voltaram para a memória.
+    40	  modeReloadScreen=true;showModeReloadScreenNow();
+    41	  final JSONObject cache=readHomeCache();
+    42	  if(cache!=null&&cache.optJSONArray("result")!=null&&cache.optJSONArray("result").length()>0){
+    43	   warmModeSwitchReady(cache,()->runOnUiThread(()->{
+    44	    if(isFinishing())return;modeReloadScreen=false;shell();
+    45	    try{warmHomeImages(cache,()->{});prefetchDetailsFromCatalog(cache,10);}catch(Exception ignored){}
+    46	    refreshEntitlements(()->{try{updateGlobalCastButtonState();}catch(Exception ignored){}});
+    47	   }));
+    48	   return;
+    49	  }
+    50	  // Sem snapshot: faz o carregamento completo normal antes de entrar.
+    51	  modeReloadScreen=true;showProviderBootstrap(sp.getString("provider_name","GreenPlay"));
+    52	 }
+    53	 void startAfterModeChange(){
+    54	  // v5.20: a troca de modo entra em uma Activity nova já na orientação final.
+    55	  // Isso evita misturar o shell mobile (barra inferior) com o shell TV (header e foco).
+    56	  JSONObject cache=readHomeCache();
+    57	  shell();
+    58	  if(cache!=null){try{warmHomeImages(cache,()->{});prefetchDetailsFromCatalog(cache,6);}catch(Exception ignored){}}
+    59	  refreshEntitlements(()->{try{updateGlobalCastButtonState();}catch(Exception ignored){}});
+    60	 }
+    61	 
+    62	 void showModeReloadScreenNow(){
+    63	  modeReloadScreen=true;base(true);root.setPadding(dp(22),dp(10),dp(22),dp(18));
+    64	  LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setGravity(Gravity.CENTER_HORIZONTAL);root.addView(c,new LinearLayout.LayoutParams(-1,-1));
+    65	  Space topFlex=new Space(this);c.addView(topFlex,new LinearLayout.LayoutParams(1,0,1));
+    66	  ImageView logo=new ImageView(this);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);applyAppLogo(logo);LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,dp(tvMode?66:84));llp.setMargins(dp(54),0,dp(54),dp(tvMode?8:14));c.addView(logo,llp);
+    67	  TextView title=t("Carregando…",tvMode?24:26);title.setTypeface(null,1);title.setGravity(Gravity.CENTER);title.setPadding(0,0,0,0);title.setIncludeFontPadding(true);c.addView(title,new LinearLayout.LayoutParams(-1,dp(tvMode?38:42)));
+    68	  TextView sub=t("Sincronizando canais, filmes, séries e imagens",tvMode?12:13);sub.setTextColor(0xffaeb8b3);sub.setGravity(Gravity.CENTER);sub.setPadding(dp(12),0,dp(12),0);sub.setMaxLines(2);LinearLayout.LayoutParams subLp=new LinearLayout.LayoutParams(-1,-2);subLp.setMargins(0,0,0,dp(tvMode?8:18));c.addView(sub,subLp);
+    69	  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setGravity(Gravity.CENTER_HORIZONTAL);panel.setPadding(dp(tvMode?28:22),dp(tvMode?20:18),dp(tvMode?28:22),dp(tvMode?18:16));GradientDrawable panelBg=round(0xff0d1712,24);panelBg.setStroke(dp(1),0xff294238);panel.setBackground(panelBg);int maxPanel=dp(tvMode?720:520);LinearLayout.LayoutParams panelLp=new LinearLayout.LayoutParams(-1,-2);panelLp.setMargins(dp(tvMode?70:14),0,dp(tvMode?70:14),dp(18));c.addView(panel,panelLp);panel.setMinimumWidth(Math.min(getResources().getDisplayMetrics().widthPixels-dp(48),maxPanel));
+    70	  TextView eyebrow=t("PREPARANDO GREENPLAY",tvMode?10:10);eyebrow.setTextColor(0xff7fe3a6);eyebrow.setTypeface(null,1);eyebrow.setLetterSpacing(.12f);eyebrow.setGravity(Gravity.CENTER);eyebrow.setIncludeFontPadding(false);LinearLayout.LayoutParams eyeLp=new LinearLayout.LayoutParams(-1,dp(tvMode?30:28));eyeLp.setMargins(0,dp(2),0,dp(2));panel.addView(eyebrow,eyeLp);
+    71	  modeTransitionPercent=t("10%",tvMode?36:36);modeTransitionPercent.setTextColor(GREEN);modeTransitionPercent.setTypeface(null,1);modeTransitionPercent.setGravity(Gravity.CENTER);modeTransitionPercent.setIncludeFontPadding(false);LinearLayout.LayoutParams pctLp=new LinearLayout.LayoutParams(-1,dp(tvMode?42:48));pctLp.setMargins(0,dp(3),0,0);panel.addView(modeTransitionPercent,pctLp);
+    72	  modeTransitionStatus=t("Conectando ao servidor",tvMode?18:18);modeTransitionStatus.setTypeface(null,1);modeTransitionStatus.setGravity(Gravity.CENTER);modeTransitionStatus.setTextColor(Color.WHITE);modeTransitionStatus.setMaxLines(2);modeTransitionStatus.setIncludeFontPadding(true);panel.addView(modeTransitionStatus,new LinearLayout.LayoutParams(-1,-2));
+    73	  modeTransitionDetail=t("Validando acesso e sincronizando o catálogo completo…",tvMode?13:12);modeTransitionDetail.setTextColor(0xffa6b0ab);modeTransitionDetail.setGravity(Gravity.CENTER);modeTransitionDetail.setMaxLines(3);modeTransitionDetail.setEllipsize(android.text.TextUtils.TruncateAt.END);modeTransitionDetail.setLineSpacing(0,1.08f);modeTransitionDetail.setPadding(dp(18),dp(2),dp(18),dp(2));LinearLayout.LayoutParams detailLp=new LinearLayout.LayoutParams(-1,-2);detailLp.setMargins(0,0,0,dp(2));panel.addView(modeTransitionDetail,detailLp);
+    74	  modeTransitionProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);modeTransitionProgress.setIndeterminate(false);modeTransitionProgress.setMax(100);modeTransitionProgress.setProgress(10);try{modeTransitionProgress.getProgressDrawable().setColorFilter(GREEN,android.graphics.PorterDuff.Mode.SRC_IN);}catch(Exception ignored){}LinearLayout.LayoutParams prLp=new LinearLayout.LayoutParams(-1,dp(5));prLp.setMargins(dp(28),dp(12),dp(28),dp(8));panel.addView(modeTransitionProgress,prLp);
+    75	  TextView footer=t("CANAIS  •  FILMES  •  SÉRIES  •  LOGOS  •  EPG",tvMode?8:9);footer.setTextColor(0xff66766e);footer.setGravity(Gravity.CENTER);footer.setLetterSpacing(.04f);footer.setIncludeFontPadding(true);footer.setMaxLines(2);panel.addView(footer,new LinearLayout.LayoutParams(-1,-2));
+    76	  Space bottomFlex=new Space(this);c.addView(bottomFlex,new LinearLayout.LayoutParams(1,0,1));
+    77	 }
+    78	 void updateModeTransition(int value,String main,String sub){
+    79	  int v=Math.max(0,Math.min(100,value));if(modeTransitionProgress!=null)modeTransitionProgress.setProgress(v);if(modeTransitionPercent!=null)modeTransitionPercent.setText(v+"%");if(modeTransitionStatus!=null&&main!=null)modeTransitionStatus.setText(main);if(modeTransitionDetail!=null&&sub!=null)modeTransitionDetail.setText(sub);
+    80	 }
+    81	 void relaunchForModeChange(boolean enable){
+    82	  if(modeSwitchPending)return;
+    83	  modeSwitchPending=true;modeSwitchImagesReady=false;modeSwitchOrientationReady=false;
+    84	  modeSwitchTargetTv=DeviceCompat.isTelevisionDevice(this)||enable;modeSwitchCache=readHomeCache();
+    85	  sp.edit().putBoolean("force_tv_mode",enable).apply();
+    86	  // v5.19: troca limpa. Nao abre loading de 100% nem Toast; mantem a tela atual
+    87	  // visivel durante a rotacao e remonta o layout assim que a orientacao estiver pronta.
+    88	  try{releaseTvInlinePlayer();}catch(Exception ignored){}
+    89	  int wanted=modeSwitchTargetTv?android.content.res.Configuration.ORIENTATION_LANDSCAPE:android.content.res.Configuration.ORIENTATION_PORTRAIT;
+    90	  if(getResources().getConfiguration().orientation==wanted)modeSwitchOrientationReady=true;
+    91	  try{setRequestedOrientation(modeSwitchTargetTv?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE:android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);}catch(Exception ignored){modeSwitchOrientationReady=true;}
+    92	  modeSwitchFallback=()->{if(!modeSwitchPending)return;modeSwitchOrientationReady=true;finishModeSwitchClean();};modeSwitchHandler.postDelayed(modeSwitchFallback,700);
+    93	  if(modeSwitchOrientationReady)finishModeSwitchClean();
+    94	 }
+    95	 void finishModeSwitchClean(){
+    96	  if(!modeSwitchPending||!modeSwitchOrientationReady||isFinishing())return;
+    97	  if(modeSwitchFallback!=null)modeSwitchHandler.removeCallbacks(modeSwitchFallback);modeSwitchFallback=null;
+    98	  modeSwitchCache=null;
+    99	  final int restoreNav=currentNavIndex;
+   100	  modeSwitchPending=false;modeSwitchImagesReady=false;modeReloadScreen=false;
+   101	  // v5.20: NÃO remonta o layout dentro da Activity antiga. Em alguns celulares isso
+   102	  // deixava a barra inferior do modo mobile presa no landscape do modo TV.
+   103	  // Reabrimos a MainActivity sem animação, já com force_tv_mode salvo e orientação pronta.
+   104	  try{
+   105	   Intent next=new Intent(this,MainActivity.class);
+   106	   next.putExtra("gp_mode_change",true);
+   107	   next.putExtra("gp_restore_nav",restoreNav);
+   108	   next.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+   109	   startActivity(next);
+   110	   overridePendingTransition(0,0);
+   111	   finish();
+   112	  }catch(Exception ex){
+   113	   // fallback seguro: se o relaunch falhar, monta o shell correto na Activity atual.
+   114	   tvMode=modeSwitchTargetTv;configureWindowForCurrentMode();homeScrollY=0;homeViewAvailable=false;homeScrollCache=null;homeBodyCache=null;requestedStartNav=restoreNav;shell();
+   115	  }
+   116	 }
+   117	 java.util.ArrayList<String> modeSwitchImageUrls(JSONObject j){
+   118	  java.util.ArrayList<String> out=new java.util.ArrayList<>();java.util.HashSet<String> seen=new java.util.HashSet<>();
+   119	  if(j==null)return out;try{JSONArray sections=j.optJSONArray("result");if(sections!=null){for(int i=0;i<sections.length()&&out.size()<48;i++){JSONObject sec=sections.optJSONObject(i);if(sec==null)continue;JSONArray data=sec.optJSONArray("data");if(data==null)continue;for(int k=0;k<data.length()&&k<4&&out.size()<48;k++){JSONObject x=data.optJSONObject(k);if(x==null)continue;String poster=x.optString("thumbnail",x.optString("portrait_img",x.optString("image","")));String land=x.optString("landscape",x.optString("landscape_img",""));if(!poster.isEmpty()&&seen.add(poster))out.add(poster);if(out.size()<48&&!land.isEmpty()&&seen.add(land))out.add(land);}}}}catch(Exception ignored){}
+   120	  return out;
+   121	 }
+   122	 JSONArray buildModeReadyFeatured(JSONObject cache){
+   123	  JSONArray out=new JSONArray();if(cache==null)return out;JSONArray sections=cache.optJSONArray("result");if(sections==null)return out;java.util.ArrayList<JSONObject> cached=new java.util.ArrayList<>(),uncached=new java.util.ArrayList<>();java.util.HashSet<String> seen=new java.util.HashSet<>();int scanned=0;for(int i=0;i<sections.length()&&scanned<180;i++){JSONObject sec=sections.optJSONObject(i);if(sec==null)continue;JSONArray data=sec.optJSONArray("data");if(data==null)continue;int take=Math.min(8,data.length());for(int k=0;k<take&&scanned<180;k++,scanned++){JSONObject x=data.optJSONObject(k);if(x==null)continue;String key=itemKey(x);if(!seen.add(key))continue;boolean hit=Img.hasCached(this,x.optString("thumbnail",""),x.optString("portrait_img",""),x.optString("image",""),x.optString("landscape",""),x.optString("landscape_img",""));(hit?cached:uncached).add(x);}}for(JSONObject x:cached){if(out.length()>=12)break;out.put(x);}for(JSONObject x:uncached){if(out.length()>=12)break;out.put(x);}return out;
+   124	 }
+   125	 java.util.ArrayList<String> modeFeaturedImageUrls(JSONArray featured){
+   126	  java.util.ArrayList<String> out=new java.util.ArrayList<>();java.util.HashSet<String> seen=new java.util.HashSet<>();if(featured==null)return out;
+   127	  int n=Math.min(4,featured.length());for(int i=0;i<n;i++){JSONObject x=featured.optJSONObject(i);if(x==null)continue;String[] c={x.optString("thumbnail",""),x.optString("portrait_img",""),x.optString("image",""),x.optString("landscape",""),x.optString("landscape_img","")};for(String u:c){if(u!=null&&!u.trim().isEmpty()&&seen.add(u.trim()))out.add(u.trim());}}
+   128	  if(featured.length()>1){JSONObject x=featured.optJSONObject(featured.length()-1);if(x!=null){String[] c={x.optString("thumbnail",""),x.optString("portrait_img",""),x.optString("image","")};for(String u:c){if(u!=null&&!u.trim().isEmpty()&&seen.add(u.trim()))out.add(u.trim());}}}
+   129	  return out;
+   130	 }
+   131	 void warmModeSwitchReady(JSONObject cache,Runnable done){
+   132	  modeReadyFeatured=buildModeReadyFeatured(cache);java.util.ArrayList<String> regular=modeSwitchImageUrls(cache);java.util.ArrayList<String> hero=modeFeaturedImageUrls(modeReadyFeatured);java.util.ArrayList<String> all=new java.util.ArrayList<>();all.addAll(hero);all.addAll(regular);if(all.isEmpty()){done.run();return;}Img.warmCached(this,all,40,420,()->{Img.prefetchBackground(this,regular);if(hero.isEmpty()){done.run();return;}Img.prefetchCritical(this,hero,Math.min(8,hero.size()),1500,done);});
+   133	 }
+   134	 void finishModeSwitchReady(JSONObject cache){
+   135	  if(isFinishing())return;modeSwitchPending=false;modeSwitchImagesReady=false;modeReloadScreen=false;
+   136	  if(modeSwitchFallback!=null)modeSwitchHandler.removeCallbacks(modeSwitchFallback);modeSwitchFallback=null;
+   137	  modeTransitionProgress=null;modeTransitionPercent=null;modeTransitionStatus=null;modeTransitionDetail=null;
+   138	  if(cache!=null)saveHomeCache(cache);
+   139	  // Dá um frame para o Android concluir a rotação antes de montar a Home inteira.
+   140	  modeSwitchHandler.postDelayed(()->{if(isFinishing())return;shell();if(cache!=null){try{Img.prefetchBackground(this,modeSwitchImageUrls(cache));prefetchDetailsFromCatalog(cache,6);}catch(Exception ignored){}}refreshEntitlements(()->{try{updateGlobalCastButtonState();}catch(Exception ignored){}});},120);
+   141	 }
+   142	 void tryFinishModeSwitch(){
+   143	  if(!modeSwitchPending||!modeSwitchOrientationReady||modeSwitchImagesReady||isFinishing())return;
+   144	  modeSwitchImagesReady=true;try{releaseTvInlinePlayer();}catch(Exception ignored){}
+   145	  tvMode=modeSwitchTargetTv;configureWindowForCurrentMode();homeScrollY=0;homeViewAvailable=false;homeScrollCache=null;homeBodyCache=null;
+   146	  final JSONObject cache=modeSwitchCache;modeSwitchCache=null;updateModeTransition(24,"Sincronizando conteúdo","Preparando filmes, séries, canais, capas, logos e EPG…");
+   147	  if(cache!=null&&cache.optJSONArray("result")!=null&&cache.optJSONArray("result").length()>0){
+   148	   updateModeTransition(42,"Filmes e séries sincronizados","Preparando capas, detalhes e canais…");
+   149	   final boolean[] delivered={false};Runnable ready=()->{if(delivered[0]||isFinishing())return;delivered[0]=true;runOnUiThread(()->{updateModeTransition(88,"Preparando logos e EPG","Finalizando logos dos canais e programação…");modeSwitchHandler.postDelayed(()->{updateModeTransition(100,"Tudo pronto","Abrindo sua experiência…");modeSwitchHandler.postDelayed(()->finishModeSwitchReady(cache),420);},120);});};
+   150	   // Tudo que pode envolver disco/rede fica nos pools de imagem. O timeout impede
+   151	   // que uma URL ruim prenda a troca de modo e evita o aviso de aplicativo travado.
+   152	   modeSwitchHandler.postDelayed(ready,2600);warmModeSwitchReady(cache,ready);return;
+   153	  }
+   154	  modeSwitchPending=false;modeSwitchImagesReady=false;modeReloadScreen=true;showProviderBootstrap(sp.getString("provider_name","GreenPlay"));
+   155	 }
+   156	 void enterTvImmersiveUi(){
+   157	  if(!tvMode)return;try{
+   158	   getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
+   159	   getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+   160	   getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+   161	   if(android.os.Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams lp=getWindow().getAttributes();lp.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(lp);}
+   162	  }catch(Exception ignored){}
+   163	 }
+   164	 @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus&&tvMode&&!tvInlineFullscreen&&!authScreen)enterTvImmersiveUi();}
+   165	 boolean isTvConfirmKeyCode(int k){return k==KeyEvent.KEYCODE_DPAD_CENTER||k==KeyEvent.KEYCODE_ENTER||k==KeyEvent.KEYCODE_NUMPAD_ENTER||k==KeyEvent.KEYCODE_BUTTON_A;}
+   166	 @Override public boolean dispatchKeyEvent(KeyEvent e){
+   167	  if(tvMode&&e!=null){
+   168	   int key=e.getKeyCode();
+   169	   // v16.204: controles da TV continuam ativos em tela cheia.
+   170	   // OK abre a faixa de canais (estilo Xprime); CIMA/BAIXO troca canal direto.
+   171	   if(tvInlineFullscreen){
+   172	    boolean navKey=key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_DOWN||key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT||isTvConfirmKeyCode(key)||key==KeyEvent.KEYCODE_BACK||key==KeyEvent.KEYCODE_ESCAPE||key==KeyEvent.KEYCODE_BUTTON_B;
+   173	    if(e.getAction()==KeyEvent.ACTION_UP&&navKey)return true;
+   174	    if(e.getAction()==KeyEvent.ACTION_DOWN){
+   175	     if(key==KeyEvent.KEYCODE_BACK||key==KeyEvent.KEYCODE_ESCAPE||key==KeyEvent.KEYCODE_BUTTON_B){if(tvFullscreenChannelOverlayVisible)hideTvFullscreenChannelOverlay();else closeTvInlineFullscreen();return true;}
+   176	     if(key==KeyEvent.KEYCODE_DPAD_UP){switchTvFullscreenChannelBy(-1);return true;}
+   177	     if(key==KeyEvent.KEYCODE_DPAD_DOWN){switchTvFullscreenChannelBy(1);return true;}
+   178	     if(key==KeyEvent.KEYCODE_DPAD_LEFT){if(!tvFullscreenChannelOverlayVisible)showTvFullscreenChannelOverlay(false);moveTvFullscreenOverlaySelection(-1);return true;}
+   179	     if(key==KeyEvent.KEYCODE_DPAD_RIGHT){if(!tvFullscreenChannelOverlayVisible)showTvFullscreenChannelOverlay(false);moveTvFullscreenOverlaySelection(1);return true;}
+   180	     if(isTvConfirmKeyCode(key)){if(e.getRepeatCount()==0){if(tvFullscreenChannelOverlayVisible)selectTvFullscreenOverlayChannel();else showTvFullscreenChannelOverlay(false);}return true;}
+   181	    }
+   182	   }
+   183	   if(e.getAction()==KeyEvent.ACTION_DOWN&&(key==KeyEvent.KEYCODE_BACK||key==KeyEvent.KEYCODE_ESCAPE||key==KeyEvent.KEYCODE_BUTTON_B)){onBackPressed();return true;}
+   184	   if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_BACK||key==KeyEvent.KEYCODE_ESCAPE||key==KeyEvent.KEYCODE_BUTTON_B))return true;
+   185	   if(isTvConfirmKeyCode(key)){
+   186	    if(e.getAction()==KeyEvent.ACTION_DOWN&&e.getRepeatCount()==0){View f=getCurrentFocus();if(f!=null&&f.isShown()&&f.isEnabled()&&f.isClickable()&&!(f instanceof EditText)&&!(f instanceof SeekBar)){f.performClick();return true;}}
+   187	    if(e.getAction()==KeyEvent.ACTION_UP)return true;
+   188	   }
+   189	  }
+   190	  return super.dispatchKeyEvent(e);
+   191	 }
+   192	 void chooseProfilePhoto(){try{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");startActivityForResult(i,REQ_PROFILE_PHOTO);}catch(Exception e){try{Intent i=new Intent(Intent.ACTION_GET_CONTENT);i.setType("image/*");startActivityForResult(Intent.createChooser(i,"Escolher foto"),REQ_PROFILE_PHOTO);}catch(Exception ignored){showAppNotice("Não foi possível abrir a galeria.",true);}}}
+   193	 String savedProfilePhoto(){if(uid==null||uid.isEmpty())return "";return getSharedPreferences("gp_profile",0).getString("photo_"+uid,"");}
+   194	 @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode!=REQ_PROFILE_PHOTO||resultCode!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();try{int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);getContentResolver().takePersistableUriPermission(uri,flags|Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}if(uid!=null&&!uid.isEmpty())getSharedPreferences("gp_profile",0).edit().putString("photo_"+uid,uri.toString()).apply();profile();}
+   195	 String deviceId(){String d=sp.getString("device_id","");if(d.isEmpty()){d=java.util.UUID.randomUUID().toString();sp.edit().putString("device_id",d).apply();}return d;}
+   196	 void cacheAccessStatus(JSONObject st){if(st==null||uid==null||uid.isEmpty())return;sp.edit().putString("access_status_"+uid,st.toString()).apply();}
+   197	 JSONObject readCachedAccessStatus(){if(uid==null||uid.isEmpty())return null;try{String raw=sp.getString("access_status_"+uid,"");return raw.isEmpty()?null:new JSONObject(raw);}catch(Exception e){return null;}}
+   198	 int jsonPositiveInt(JSONObject o,String... keys){if(o==null||keys==null)return 0;for(String k:keys){try{if(!o.has(k)||o.isNull(k))continue;Object v=o.opt(k);if(v instanceof Number){int n=((Number)v).intValue();if(n>0)return n;}String raw=String.valueOf(v).trim();if(raw.isEmpty())continue;String digits=raw.replaceAll("[^0-9]","");if(!digits.isEmpty()){int n=Integer.parseInt(digits);if(n>0)return n;}}catch(Exception ignored){}}return 0;}
+   199	 String jsonFirstString(JSONObject o,String... keys){if(o==null||keys==null)return "";for(String k:keys){String v=o.optString(k,"").trim();if(!v.isEmpty()&&!"null".equalsIgnoreCase(v))return v;}return "";}
+   200	 int totalScreensFrom(JSONObject st){if(st==null)return 0;String[] keys={"_resolved_screens","screens_total","screens","telas","plan_screens","package_screens","max_screens","screen_limit","screens_limit","allowed_screens","device_limit","max_devices","max_connections","simultaneous_streams","simultaneous_connections","connections"};int n=jsonPositiveInt(st,keys);if(n>0)return n;String[] nested={"plan","package","subscription","entitlement","access","data","user","account"};for(String nk:nested){JSONObject x=st.optJSONObject(nk);n=jsonPositiveInt(x,keys);if(n>0)return n;}return 0;}
+   201	 int usedScreensFrom(JSONObject st){if(st==null)return 0;String[] keys={"used_screens","screens_in_use","active_screens","current_screens","active_sessions","sessions_in_use","connected_devices_count","devices_in_use","current_connections","active_connections"};int n=jsonPositiveInt(st,keys);if(n>0)return n;String[] nested={"subscription","entitlement","access","data","user","account"};for(String nk:nested){JSONObject x=st.optJSONObject(nk);n=jsonPositiveInt(x,keys);if(n>0)return n;}return 0;}
+   202	 String planNameFrom(JSONObject st){if(st==null)return "";String n=jsonFirstString(st,"plan_name","package_name","plan","package","title","name");if(!n.isEmpty())return n;JSONObject p=st.optJSONObject("plan");if(p==null)p=st.optJSONObject("package");return jsonFirstString(p,"plan_name","package_name","title","name");}
+   203	 String planIdFrom(JSONObject st){if(st==null)return "";String n=jsonFirstString(st,"plan_id","package_id","subscription_package_id","subscription_id");if(!n.isEmpty())return n;JSONObject p=st.optJSONObject("plan");if(p==null)p=st.optJSONObject("package");return jsonFirstString(p,"id","plan_id","package_id");}
+   204	 void rememberResolvedScreens(JSONObject st,int used,int total){if(total<1)return;try{st.put("_resolved_screens",total);if(used>0)st.put("_resolved_used_screens",used);}catch(Exception ignored){}if(uid!=null&&!uid.isEmpty())sp.edit().putInt("plan_screens_"+uid,total).putInt("plan_used_screens_"+uid,Math.max(1,used)).apply();cacheAccessStatus(st);}
+   205	 void resolveScreensFromPanel(JSONObject st,ScreenResolveCB cb){int direct=Math.max(totalScreensFrom(st),uid==null?0:sp.getInt("plan_screens_"+uid,0));int used=Math.max(usedScreensFrom(st),uid==null?0:sp.getInt("plan_used_screens_"+uid,0));if(used<1)used=1;final int initialTotal=Math.max(1,direct),initialUsed=used;if(direct>1){if(cb!=null)runOnUiThread(()->cb.done(Math.min(initialUsed,initialTotal),initialTotal));return;}final String wantedName=planNameFrom(st).trim(),wantedId=planIdFrom(st).trim();Api.post("subscription_package",Api.m("user_id",uid,"reseller_code",reseller),new Api.CB(){public void ok(JSONObject j){int best=initialTotal;JSONArray a=j.optJSONArray("result");if(a!=null){for(int i=0;i<a.length();i++){JSONObject p=a.optJSONObject(i);if(p==null)continue;String id=jsonFirstString(p,"id","plan_id","package_id");String name=jsonFirstString(p,"plan_name","package_name","title","name");boolean match=(!wantedId.isEmpty()&&wantedId.equals(id))||(!wantedName.isEmpty()&&wantedName.equalsIgnoreCase(name.trim()));if(!match)continue;best=Math.max(best,totalScreensFrom(p));if(best>1)break;}}final int total=Math.max(1,best);final int u=Math.min(Math.max(1,initialUsed),total);if(total>1)rememberResolvedScreens(st,u,total);if(cb!=null)runOnUiThread(()->cb.done(u,total));}public void err(String e){if(cb!=null)runOnUiThread(()->cb.done(Math.min(initialUsed,initialTotal),initialTotal));}});}
+   206	 void applyEntitlements(JSONObject st){if(st==null)return;cacheAccessStatus(st);planLiveAllowed=st.optInt("live_allowed",st.optBoolean("live_allowed",true)?1:0)==1;planAdultAllowed=st.optInt("adult_allowed",st.optBoolean("adult_allowed",true)?1:0)==1;int cached=(uid==null||uid.isEmpty())?0:sp.getInt("plan_screens_"+uid,0);planScreens=Math.max(1,Math.max(totalScreensFrom(st),cached));activePlanName=planNameFrom(st);int liveCount=sp.getInt("provider_live_count",-1);if(liveCount>=0){sessionHasLive=liveCount>0;sessionLiveKnown=true;}else sessionHasLive=sp.getBoolean("provider_has_live",sessionHasLive);if(!planAdultAllowed&&sp.getBoolean("adult",false))sp.edit().putBoolean("adult",false).apply();}
+   207	 void refreshEntitlements(Runnable done){if(uid==null||uid.isEmpty()){if(done!=null)done.run();return;}Api.post("access_status",Api.m("user_id",uid),new Api.CB(){public void ok(JSONObject j){JSONArray a=j.optJSONArray("result");JSONObject st=(a!=null&&a.length()>0)?a.optJSONObject(0):null;if(st!=null){applyEntitlements(st);resolveScreensFromPanel(st,(used,total)->{planScreens=Math.max(planScreens,total);if(done!=null)done.run();});}else if(done!=null)runOnUiThread(done);}public void err(String e){if(done!=null)runOnUiThread(done);}});}
+   208	 boolean adultContentVisible(){return planAdultAllowed&&sp.getBoolean("adult",false);}
+   209	 String adultNorm(String raw){if(raw==null)return "";String x=java.text.Normalizer.normalize(raw,java.text.Normalizer.Form.NFD).replaceAll("\\p{M}+","").toLowerCase(java.util.Locale.ROOT);return x;}
+   210	 boolean isAdultLabel(String raw){String x=adultNorm(raw);if(x.isEmpty())return false;return x.matches(".*(^|[^a-z0-9])(adult|adulto|adultos|xxx|18\\+|erotico|erotica|porn|porno|sex)([^a-z0-9]|$).*");}
+   211	 JSONArray filterAdultCategories(JSONArray src){if(src==null)return new JSONArray();if(adultContentVisible())return src;JSONArray out=new JSONArray();for(int i=0;i<src.length();i++){JSONObject c=src.optJSONObject(i);if(c==null)continue;String n=c.optString("category_name",c.optString("name",c.optString("title","")));if(!isAdultLabel(n))out.put(c);}return out;}
+   212	 boolean adultSectionBlocked(JSONObject sec){if(adultContentVisible()||sec==null)return false;return isAdultLabel(sec.optString("title",""))||isAdultLabel(sec.optString("category_name",""));}
+   213	 java.util.HashSet<String> adultLiveCategoryIds(){java.util.HashSet<String> ids=new java.util.HashSet<>();if(adultContentVisible())return ids;JSONObject cache=readHomeCache();JSONArray cats=cache==null?null:cache.optJSONArray("live_categories");if(cats!=null)for(int i=0;i<cats.length();i++){JSONObject c=cats.optJSONObject(i);if(c==null)continue;String n=c.optString("category_name",c.optString("name",""));if(isAdultLabel(n))ids.add(c.optString("category_id",c.optString("id","")));}return ids;}
+   214	 boolean adultLiveBlocked(JSONObject x,java.util.HashSet<String> blocked){if(adultContentVisible()||x==null)return false;String cid=x.optString("category_id","");if(blocked!=null&&blocked.contains(cid))return true;return isAdultLabel(x.optString("category_name",""))||isAdultLabel(x.optString("name",""));}
+   215	
+   216	 void applyProfileAccessUi(JSONObject st,TextView planValue,TextView validityValue,TextView screensValue,TextView serverValue,TextView subscriptionValue,LinearLayout renewal,TextView renewTitle,TextView renewSub){if(st==null)return;String mode=st.optString("mode","");String msg=st.optString("message","");String exp=st.optString("expires_at","");String plan=planNameFrom(st);String srv=st.optString("provider_name",st.optString("server_name",sp.getString("provider_name","GreenPlay")));boolean trial=st.optInt("trial_active",0)==1||st.optInt("is_trial",0)==1||mode.toLowerCase(java.util.Locale.ROOT).contains("trial")||msg.toLowerCase(java.util.Locale.ROOT).contains("teste");boolean active=st.optBoolean("allowed",st.optBoolean("active",true));if(trial&&active)plan="Teste Grátis";else if(plan.isEmpty())plan=active?"Premium":"Sem plano";planValue.setText(plan);validityValue.setText(exp.isEmpty()?"—":shortDate(exp));int total=Math.max(totalScreensFrom(st),(uid==null||uid.isEmpty())?0:sp.getInt("plan_screens_"+uid,0));if(total<1)total=1;int used=Math.max(usedScreensFrom(st),(uid==null||uid.isEmpty())?0:sp.getInt("plan_used_screens_"+uid,0));if(used<1)used=1;used=Math.min(used,total);screensValue.setText(used+" de "+total);serverValue.setText(srv.isEmpty()?"GreenPlay":srv);subscriptionValue.setText(active?(trial?"Teste grátis ativo":"Ativa"):"Inativa");subscriptionValue.setTextColor(active?GREEN:0xffaab4af);validityValue.setTextColor(active?0xffd3d7d5:0xff8f9994);if(active&&trial){String tt=st.optString("trial_title","Teste grátis ativo");String ts=st.optString("trial_subtitle","Conheça os planos disponíveis");renewTitle.setText(tt.isEmpty()?"Teste grátis ativo":tt);renewSub.setText(ts.isEmpty()?"Conheça os planos disponíveis":ts);renewal.setVisibility(View.VISIBLE);}else if(!active){boolean wasTrial=trial||msg.toLowerCase(java.util.Locale.ROOT).contains("teste");renewTitle.setText(wasTrial?"Teste encerrado":"Plano vencido");renewSub.setText(wasTrial?"Assine para continuar assistindo":"Renove para continuar assistindo");renewal.setVisibility(View.VISIBLE);}else renewal.setVisibility(View.GONE);}
+   217	
+   218	 void migrateLegacyOfflineDownloads(){try{JSONArray a=new JSONArray(sp.getString("offline_items","[]"));JSONArray keep=new JSONArray();boolean changed=false;java.io.File privateDir=new java.io.File(getFilesDir(),"offline");String privatePrefix=privateDir.getAbsolutePath();for(int i=0;i<a.length();i++){JSONObject o=a.optJSONObject(i);if(o==null)continue;long did=o.optLong("download_id",0);String path=o.optString("path","");boolean legacy=did>0||(!path.isEmpty()&&!path.startsWith(privatePrefix));if(legacy){changed=true;if(did>0)try{android.app.DownloadManager dm=(android.app.DownloadManager)getSystemService(DOWNLOAD_SERVICE);dm.remove(did);}catch(Exception ignored){}if(!path.isEmpty())try{new java.io.File(path).delete();}catch(Exception ignored){}continue;}keep.put(o);}if(changed)sp.edit().putString("offline_items",keep.toString()).apply();}catch(Exception ignored){}}
+   219	 void loadIdentityCache(){appName=sp.getString("app_name","GreenPlay");logoUrl=sp.getString("app_logo","");bgUrl=sp.getString("app_background","");try{GREEN=Color.parseColor(sp.getString("app_color","#20E070"));}catch(Exception e){GREEN=Color.rgb(32,224,112);}}
+   220	 void refreshIdentity(){Api.post("general_setting",Api.m(),new Api.CB(){public void ok(JSONObject j){JSONArray a=j.optJSONArray("result");if(a==null)return;android.content.SharedPreferences.Editor ed=sp.edit();for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);String k=x.optString("key"),v=x.optString("value");if(k.equals("greenplay_app_name"))ed.putString("app_name",v);if(k.equals("greenplay_app_logo"))ed.putString("app_logo",v);if(k.equals("greenplay_app_background"))ed.putString("app_background",v);if(k.equals("greenplay_primary_color"))ed.putString("app_color",v);if(k.equals("greenplay_support_whatsapp")&&!v.trim().isEmpty()&&(reseller==null||reseller.isEmpty()||sp.getString("support","").trim().isEmpty()))ed.putString("support",v);}ed.apply();loadIdentityCache();runOnUiThread(()->{ if(uid.isEmpty()){ if(authScreen) login(); } else { refreshHomeHeaderBranding(); } });}public void err(String e){}}); }
+=== ONCREATE/ONRESUME ===
+1-package fun.greenplay.app;
+2-import android.app.*;import android.os.*;import android.content.*;import android.graphics.Color;import android.graphics.drawable.*;import android.net.Uri;import android.text.InputType;import android.view.*;import android.widget.*;import org.json.*;import java.util.*;
+3-public class MainActivity extends Activity{ // GreenPlay 5.28.37
+4- interface PreparedHomeCB{void ok(JSONObject j);void err(String e);} interface DetailPrepareCB{void done(JSONObject d);} interface LiveProbeCB{void done(boolean hasLive,boolean known,JSONArray sample);} interface ScreenResolveCB{void done(int used,int total);}
+5- static final int REQ_PROFILE_PHOTO=8601; static final int TAG_SKIP_TV_FOCUS_FX=0x4f120001; static final int TAG_EPG_LOADING=0x4f120002; static final int TAG_SCROLL_TOP_INSTALLED=0x4f120003; int GREEN=Color.rgb(32,224,112); final int BG=Color.rgb(7,17,12),CARD=Color.rgb(16,32,24); LinearLayout root,body,navBar,continueHost,detailNavOverlay; boolean tvMode=false; java.util.WeakHashMap<View,Boolean> tvFocusArmed=new java.util.WeakHashMap<>(); FrameLayout contentFrame; ScrollView mainScroll,savedScroll,homeScrollCache,sectionParentScroll; LinearLayout savedBody,homeBodyCache,tvPageRoot,sectionParentBody; ImageView homeHeaderLogo,tvEpgLogo; TextView homeHeaderBrandFallback; int homeScrollY=0,sectionParentScrollY=0,sectionParentViewGen=0; boolean homeViewAvailable=false,sectionPageOpen=false; String sectionReturnTab=""; TextView navHome,navFav,navTv,navFootball,navMovies,navSeries,navShorts,navKids,navDownloads,navProfile,scrollTopButton; ScrollView scrollTopHost; ImageView globalCastButton; android.content.SharedPreferences sp; String uid="",reseller="",appName="GreenPlay",logoUrl="",bgUrl=""; boolean authScreen=false,detailOpen=false,searchScreenOpen=false,exitDialogOpen=false,providerSwitchScreen=false,plansScreen=false,providerAvailabilityCheckBusy=false; long providerAvailabilityLastCheck=0; int liveOffset=0,currentNavIndex=0,savedNavIndex=0,savedViewGen=0,requestedStartNav=-1; String liveSearch="",activeHomeTab="Recomendações",homeCachedTab="",tvPendingCategoryHint=""; LinearLayout liveListHost,tvCategoryHost,tvChannelHost,tvPreviewPlaceholder; TextView liveState,tvPreviewTitle,tvPreviewSubtitle,tvNowPlaying,tvEpgNow,tvEpgNext,tvSoundButton,tvCastButton,tvFullButton; EditText liveSearchBox; String tvSelectedCategory=""; int tvFocusedCategoryIndex=-1; FrameLayout tvPreviewFrame; ImageView tvVideoBackdrop; androidx.media3.ui.PlayerView tvInlinePlayerView; androidx.media3.exoplayer.ExoPlayer tvInlinePlayer; int tvVideoWidth=0,tvVideoHeight=0; float tvVideoPixelRatio=1f; boolean tvBackdropCapturePending=false; Runnable tvBackdropBeat; JSONObject tvActiveChannel; ScrollView tvCategoryScroll,tvChannelScroll; HorizontalScrollView tvCategoryRail; View tvTopBar,tvTabsBar,tvPanesView,tvWideLeftPanel; LinearLayout tvWideSplit; boolean tvCinemaMode=false,tvCinemaDrawerOpen=false; boolean tvInlineMuted=false,tvInlinePrepared=false,tvInlineSessionHeld=false,tvInlineSessionAcquiring=false,tvResumeAfterFullscreen=false,tvInlineFullscreen=false,tvInlineSwitching=false,tvResumeAfterBackground=false,tvOrientationTransition=false,tvUiTransitioning=false,tvAutoPlayPending=false; int tvInlineSourceIndex=0,tvInlineFormatAttemptIndex=-1,tvInlineFormatAttemptMask=0,tvInlineFormatMode=0,tvInlineBufferStarts=0,tvSavedScrollY=0,tvEpgRequestToken=0,tvInlineRecoveryCount=0; long tvInlineLastBufferAt=0,tvBackgroundAt=0,tvInlineBufferingSince=0,tvInlineLastPosition=-1,tvInlineLastAdvanceAt=0; java.util.ArrayList<String> tvInlineSources=new java.util.ArrayList<>(); Handler tvInlineHandler=new Handler(Looper.getMainLooper()); Runnable tvInlineBeat,tvInlinePendingAcquire,tvEpgBeat,tvInlineWatchdog,tvEpgHide; View tvEpgOverlay; ViewGroup tvPreviewHomeParent; ViewGroup.LayoutParams tvPreviewHomeLayoutParams; int tvPreviewHomeIndex=-1; int viewGen=0; int featuredShuffleTick=0; boolean homeExtrasStarted=false; boolean sessionHasLive=false,sessionLiveKnown=false,planLiveAllowed=true,planAdultAllowed=true; int planScreens=1; String activePlanName=""; int planFlowStage=0; android.os.CountDownTimer pixTimer=null; static JSONObject preparedHomeData=null; static String preparedHomeProvider=""; java.util.HashMap<String,String> detailMemoryCache=new java.util.HashMap<>(); java.util.ArrayDeque<JSONObject> detailPrefetchQueue=new java.util.ArrayDeque<>(); java.util.HashSet<String> detailPrefetchKeys=new java.util.HashSet<>(); int detailPrefetchActive=0; boolean detailPreparing=false; View detailPrepareOverlay,accessExpiredOverlay; LinearLayout activeSeriesResumeHost; JSONObject activeSeriesDetail,activeSeriesSource; boolean modeSwitchPending=false,modeSwitchTargetTv=false,modeSwitchOrientationReady=false,modeSwitchImagesReady=false,modeReloadScreen=false; JSONObject modeSwitchCache=null; final Handler modeSwitchHandler=new Handler(Looper.getMainLooper()); Runnable modeSwitchFallback=null; JSONArray modeReadyFeatured=null; ProgressBar modeTransitionProgress=null; TextView modeTransitionPercent=null,modeTransitionStatus=null,modeTransitionDetail=null; Runnable tvQueuedChannelSwitch=null; JSONObject tvQueuedChannel=null; int tvChannelSwitchGeneration=0,tvPlaybackGeneration=0; JSONArray tvCurrentChannels=new JSONArray(); FrameLayout tvFullscreenChannelOverlay=null; HorizontalScrollView tvFullscreenChannelScroll=null; LinearLayout tvFullscreenChannelRow=null; boolean tvFullscreenChannelOverlayVisible=false; int tvFullscreenOverlayIndex=-1; Runnable tvFullscreenOverlayHide=null; long tvFullscreenLastNavAt=0; int tvChannelListGeneration=0,tvBrowserGridGeneration=0; Runnable tvChannelRefreshTask=null; boolean tvChannelChunkPending=false; GridLayout tvShortsGrid=null; int tvShortsCardW=0,tvShortsGridGen=0; ScrollView tvCatalogGridScroll=null; GridLayout tvCatalogGrid=null; androidx.recyclerview.widget.RecyclerView tvCatalogRecycler=null; TextView tvCatalogState=null; TvCatalogAdapter tvCatalogAdapter=null; JSONArray tvCatalogRows=new JSONArray(); int tvCatalogNextIndex=0,tvCatalogCols=6,tvCatalogCardW=0,tvCatalogImgH=0,tvCatalogGap=0,tvCatalogRenderRequest=0; boolean tvCatalogChunkPending=false; final Handler tvHeaderNavHandler=new Handler(Looper.getMainLooper()); boolean tvHeaderNavBusy=false; Runnable tvHeaderNavUnlock=null;
+6- interface AllPagesCB{void ok(JSONArray rows);void err(String error);}
+7- interface PersistentHomeCB{void ok(JSONObject j);void miss();}
+8- static final long HOME_INACTIVITY_RESYNC_MS=72L*60L*60L*1000L;
+9- static final long HOME_BACKGROUND_REFRESH_MS=12L*60L*60L*1000L;
+10- static final java.util.concurrent.ExecutorService CATALOG_IO=java.util.concurrent.Executors.newSingleThreadExecutor();
+11- boolean persistentHomeReadPending=false; boolean catalogPrefetchBusy=false,catalogTabPrepareBusy=false; String catalogTabPending=""; long catalogPrefetchAt=0L; GridLayout mobileCategoryGrid=null; JSONArray mobileCategoryRows=new JSONArray(); int mobileCategoryNextIndex=0,mobileCategoryCardW=0,mobileCategoryGen=0; boolean mobileCategoryChunkPending=false; int mobileCategoryTypeId=0,mobileCategoryNextPageNo=1,mobileCategoryNetworkTotal=0,mobileCategoryNetworkRetries=0; String mobileCategoryId=""; boolean mobileCategoryNetworkBusy=false,mobileCategoryNetworkDone=false,mobileCategoryGreenShorts=false; java.util.HashSet<String> mobileCategorySeen=new java.util.HashSet<>(); LinearLayout mobileCategoryLoadingFooter=null; TextView mobileCategoryLoadingText=null; ProgressBar mobileCategoryLoadingProgress=null;
+12- final java.util.HashMap<String,String[]> tvEpgCache=new java.util.HashMap<>(); final java.util.HashMap<String,Long> tvEpgCacheAt=new java.util.HashMap<>(); static final long TV_EPG_CACHE_MS=50000L;
+13- boolean playerRoundTrip=false; ScrollView playerReturnScroll=null; LinearLayout playerReturnBody=null; int playerReturnY=0,playerReturnNav=0; String playerReturnTab="";
+14: public void onCreate(Bundle b){super.onCreate(b);sp=getSharedPreferences("gp",0);tvMode=DeviceCompat.isTelevisionDevice(this)||sp.getBoolean("force_tv_mode",false);requestedStartNav=getIntent()!=null?getIntent().getIntExtra("gp_restore_nav",-1):-1;configureWindowForCurrentMode();migrateLegacyOfflineDownloads();uid=sp.getString("uid","");reseller=sp.getString("reseller","");Api.PROVIDER=sp.getString("provider_id","");loadIdentityCache();boolean modeChange=getIntent()!=null&&getIntent().getBooleanExtra("gp_mode_change",false);boolean hardModeReload=getIntent()!=null&&getIntent().getBooleanExtra("gp_hard_mode_reload",false);if(uid.isEmpty())login();else if(hardModeReload)startAfterHardModeReload();else if(modeChange)startAfterModeChange();else startExistingSession();refreshIdentity();new Handler(Looper.getMainLooper()).postDelayed(()->{if(!isFinishing())AppUpdater.check(this);},2500);}
+15: @Override protected void onResume(){super.onResume();AppUpdater.resumeInstall(this);new Handler(Looper.getMainLooper()).postDelayed(()->{if(!isFinishing())AppUpdater.check(this);},900);new Handler(Looper.getMainLooper()).postDelayed(()->{if(!isFinishing())checkCurrentProviderAvailability(false);},1400);if(tvMode&&!modeSwitchPending)enterTvImmersiveUi();if(!wideTvUi())enforceGlobalBottomNav();updateGlobalCastButtonState();if(detailOpen&&activeSeriesResumeHost!=null&&activeSeriesDetail!=null)renderSeriesResume(activeSeriesSource,activeSeriesDetail,activeSeriesResumeHost);if(tvResumeAfterFullscreen){tvResumeAfterFullscreen=false;}if(tvResumeAfterBackground&&!tvOrientationTransition&&tvInlinePlayer!=null&&tvActiveChannel!=null){tvResumeAfterBackground=false;resumeTvAtLiveEdge();}if(playerRoundTrip)new Handler(Looper.getMainLooper()).postDelayed(()->restorePlayerReturnState(),60);}
+16- @Override protected void onPause(){try{if(!tvOrientationTransition){tvResumeAfterBackground=tvInlinePlayer!=null&&tvActiveChannel!=null;tvBackgroundAt=android.os.SystemClock.elapsedRealtime();if(tvInlinePlayer!=null)tvInlinePlayer.pause();}}catch(Exception ignored){}super.onPause();}
+17- @Override protected void onStop(){try{if(!tvOrientationTransition&&tvInlinePlayer!=null)tvInlinePlayer.pause();}catch(Exception ignored){}super.onStop();}
+18- @Override protected void onDestroy(){try{destroyTvInlinePlayer();}catch(Exception ignored){}try{getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);}catch(Exception ignored){}super.onDestroy();}
+19- @Override public void onLowMemory(){super.onLowMemory();if(!modeSwitchPending)trimGreenPlayMemory(true);}
+20- @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(!modeSwitchPending&&level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)trimGreenPlayMemory(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL);}
+21- void trimGreenPlayMemory(boolean aggressive){try{if(Img.MEM!=null)Img.MEM.trimToSize(aggressive?4*1024:10*1024);}catch(Exception ignored){}try{detailMemoryCache.clear();detailPrefetchQueue.clear();detailPrefetchKeys.clear();}catch(Exception ignored){}if(aggressive&&currentNavIndex==2){try{if(homeScrollCache!=null&&homeScrollCache.getParent()==null){homeScrollCache.removeAllViews();homeScrollCache=null;homeBodyCache=null;homeViewAvailable=false;homeScrollY=0;}}catch(Exception ignored){}}}
+22-
+23- void configureWindowForCurrentMode(){
+24-  try{getWindow().setBackgroundDrawable(new ColorDrawable(BG));getWindow().getDecorView().setBackgroundColor(BG);}catch(Exception ignored){}
+25-  try{setRequestedOrientation(tvMode?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE:android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);}catch(Exception ignored){}
+26-  try{
+27-   if(tvMode){getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);enterTvImmersiveUi();}
+28-   else{
+29-    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON|WindowManager.LayoutParams.FLAG_FULLSCREEN);
+30-    try{getWindow().setStatusBarColor(Color.BLACK);}catch(Exception ignored2){}
+31-    try{getWindow().setNavigationBarColor(BG);}catch(Exception ignored2){}
+32-    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+33-   }
+34-  }catch(Exception ignored){}
+35- }
+36- void startAfterHardModeReload(){
+37-  // v16.195: troca de modo se comporta como fechar e abrir o aplicativo.
+38-  // A tela de recarga aparece primeiro; a nova Home só é montada quando o
+39-  // snapshot já foi restaurado e as capas críticas voltaram para a memória.
+40-  modeReloadScreen=true;showModeReloadScreenNow();
+41-  final JSONObject cache=readHomeCache();
+42-  if(cache!=null&&cache.optJSONArray("result")!=null&&cache.optJSONArray("result").length()>0){
+43-   warmModeSwitchReady(cache,()->runOnUiThread(()->{
+44-    if(isFinishing())return;modeReloadScreen=false;shell();
+45-    try{warmHomeImages(cache,()->{});prefetchDetailsFromCatalog(cache,10);}catch(Exception ignored){}
+46-    refreshEntitlements(()->{try{updateGlobalCastButtonState();}catch(Exception ignored){}});
+47-   }));
+48-   return;
+49-  }
+50-  // Sem snapshot: faz o carregamento completo normal antes de entrar.
+51-  modeReloadScreen=true;showProviderBootstrap(sp.getString("provider_name","GreenPlay"));
+52- }
+53- void startAfterModeChange(){
+54-  // v5.20: a troca de modo entra em uma Activity nova já na orientação final.
+55-  // Isso evita misturar o shell mobile (barra inferior) com o shell TV (header e foco).
+56-  JSONObject cache=readHomeCache();
+57-  shell();
+58-  if(cache!=null){try{warmHomeImages(cache,()->{});prefetchDetailsFromCatalog(cache,6);}catch(Exception ignored){}}
+59-  refreshEntitlements(()->{try{updateGlobalCastButtonState();}catch(Exception ignored){}});
+60- }
+61- 
+62- void showModeReloadScreenNow(){
+63-  modeReloadScreen=true;base(true);root.setPadding(dp(22),dp(10),dp(22),dp(18));
+64-  LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setGravity(Gravity.CENTER_HORIZONTAL);root.addView(c,new LinearLayout.LayoutParams(-1,-1));
+65-  Space topFlex=new Space(this);c.addView(topFlex,new LinearLayout.LayoutParams(1,0,1));
+66-  ImageView logo=new ImageView(this);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);applyAppLogo(logo);LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,dp(tvMode?66:84));llp.setMargins(dp(54),0,dp(54),dp(tvMode?8:14));c.addView(logo,llp);
+67-  TextView title=t("Carregando…",tvMode?24:26);title.setTypeface(null,1);title.setGravity(Gravity.CENTER);title.setPadding(0,0,0,0);title.setIncludeFontPadding(true);c.addView(title,new LinearLayout.LayoutParams(-1,dp(tvMode?38:42)));
+68-  TextView sub=t("Sincronizando canais, filmes, séries e imagens",tvMode?12:13);sub.setTextColor(0xffaeb8b3);sub.setGravity(Gravity.CENTER);sub.setPadding(dp(12),0,dp(12),0);sub.setMaxLines(2);LinearLayout.LayoutParams subLp=new LinearLayout.LayoutParams(-1,-2);subLp.setMargins(0,0,0,dp(tvMode?8:18));c.addView(sub,subLp);
+69-  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setGravity(Gravity.CENTER_HORIZONTAL);panel.setPadding(dp(tvMode?28:22),dp(tvMode?20:18),dp(tvMode?28:22),dp(tvMode?18:16));GradientDrawable panelBg=round(0xff0d1712,24);panelBg.setStroke(dp(1),0xff294238);panel.setBackground(panelBg);int maxPanel=dp(tvMode?720:520);LinearLayout.LayoutParams panelLp=new LinearLayout.LayoutParams(-1,-2);panelLp.setMargins(dp(tvMode?70:14),0,dp(tvMode?70:14),dp(18));c.addView(panel,panelLp);panel.setMinimumWidth(Math.min(getResources().getDisplayMetrics().widthPixels-dp(48),maxPanel));
+70-  TextView eyebrow=t("PREPARANDO GREENPLAY",tvMode?10:10);eyebrow.setTextColor(0xff7fe3a6);eyebrow.setTypeface(null,1);eyebrow.setLetterSpacing(.12f);eyebrow.setGravity(Gravity.CENTER);eyebrow.setIncludeFontPadding(false);LinearLayout.LayoutParams eyeLp=new LinearLayout.LayoutParams(-1,dp(tvMode?30:28));eyeLp.setMargins(0,dp(2),0,dp(2));panel.addView(eyebrow,eyeLp);
+71-  modeTransitionPercent=t("10%",tvMode?36:36);modeTransitionPercent.setTextColor(GREEN);modeTransitionPercent.setTypeface(null,1);modeTransitionPercent.setGravity(Gravity.CENTER);modeTransitionPercent.setIncludeFontPadding(false);LinearLayout.LayoutParams pctLp=new LinearLayout.LayoutParams(-1,dp(tvMode?42:48));pctLp.setMargins(0,dp(3),0,0);panel.addView(modeTransitionPercent,pctLp);
+72-  modeTransitionStatus=t("Conectando ao servidor",tvMode?18:18);modeTransitionStatus.setTypeface(null,1);modeTransitionStatus.setGravity(Gravity.CENTER);modeTransitionStatus.setTextColor(Color.WHITE);modeTransitionStatus.setMaxLines(2);modeTransitionStatus.setIncludeFontPadding(true);panel.addView(modeTransitionStatus,new LinearLayout.LayoutParams(-1,-2));
+73-  modeTransitionDetail=t("Validando acesso e sincronizando o catálogo completo…",tvMode?13:12);modeTransitionDetail.setTextColor(0xffa6b0ab);modeTransitionDetail.setGravity(Gravity.CENTER);modeTransitionDetail.setMaxLines(3);modeTransitionDetail.setEllipsize(android.text.TextUtils.TruncateAt.END);modeTransitionDetail.setLineSpacing(0,1.08f);modeTransitionDetail.setPadding(dp(18),dp(2),dp(18),dp(2));LinearLayout.LayoutParams detailLp=new LinearLayout.LayoutParams(-1,-2);detailLp.setMargins(0,0,0,dp(2));panel.addView(modeTransitionDetail,detailLp);
+74-  modeTransitionProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);modeTransitionProgress.setIndeterminate(false);modeTransitionProgress.setMax(100);modeTransitionProgress.setProgress(10);try{modeTransitionProgress.getProgressDrawable().setColorFilter(GREEN,android.graphics.PorterDuff.Mode.SRC_IN);}catch(Exception ignored){}LinearLayout.LayoutParams prLp=new LinearLayout.LayoutParams(-1,dp(5));prLp.setMargins(dp(28),dp(12),dp(28),dp(8));panel.addView(modeTransitionProgress,prLp);
+75-  TextView footer=t("CANAIS  •  FILMES  •  SÉRIES  •  LOGOS  •  EPG",tvMode?8:9);footer.setTextColor(0xff66766e);footer.setGravity(Gravity.CENTER);footer.setLetterSpacing(.04f);footer.setIncludeFontPadding(true);footer.setMaxLines(2);panel.addView(footer,new LinearLayout.LayoutParams(-1,-2));
+76-  Space bottomFlex=new Space(this);c.addView(bottomFlex,new LinearLayout.LayoutParams(1,0,1));
+77- }
+78- void updateModeTransition(int value,String main,String sub){
+79-  int v=Math.max(0,Math.min(100,value));if(modeTransitionProgress!=null)modeTransitionProgress.setProgress(v);if(modeTransitionPercent!=null)modeTransitionPercent.setText(v+"%");if(modeTransitionStatus!=null&&main!=null)modeTransitionStatus.setText(main);if(modeTransitionDetail!=null&&sub!=null)modeTransitionDetail.setText(sub);
+80- }
+81- void relaunchForModeChange(boolean enable){
+82-  if(modeSwitchPending)return;
+83-  modeSwitchPending=true;modeSwitchImagesReady=false;modeSwitchOrientationReady=false;
+84-  modeSwitchTargetTv=DeviceCompat.isTelevisionDevice(this)||enable;modeSwitchCache=readHomeCache();
+85-  sp.edit().putBoolean("force_tv_mode",enable).apply();
+86-  // v5.19: troca limpa. Nao abre loading de 100% nem Toast; mantem a tela atual
+87-  // visivel durante a rotacao e remonta o layout assim que a orientacao estiver pronta.
+88-  try{releaseTvInlinePlayer();}catch(Exception ignored){}
+89-  int wanted=modeSwitchTargetTv?android.content.res.Configuration.ORIENTATION_LANDSCAPE:android.content.res.Configuration.ORIENTATION_PORTRAIT;
+90-  if(getResources().getConfiguration().orientation==wanted)modeSwitchOrientationReady=true;
+91-  try{setRequestedOrientation(modeSwitchTargetTv?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE:android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);}catch(Exception ignored){modeSwitchOrientationReady=true;}
+92-  modeSwitchFallback=()->{if(!modeSwitchPending)return;modeSwitchOrientationReady=true;finishModeSwitchClean();};modeSwitchHandler.postDelayed(modeSwitchFallback,700);
+93-  if(modeSwitchOrientationReady)finishModeSwitchClean();
+94- }
+95- void finishModeSwitchClean(){
+96-  if(!modeSwitchPending||!modeSwitchOrientationReady||isFinishing())return;
+97-  if(modeSwitchFallback!=null)modeSwitchHandler.removeCallbacks(modeSwitchFallback);modeSwitchFallback=null;
+98-  modeSwitchCache=null;
+99-  final int restoreNav=currentNavIndex;
+100-  modeSwitchPending=false;modeSwitchImagesReady=false;modeReloadScreen=false;
+101-  // v5.20: NÃO remonta o layout dentro da Activity antiga. Em alguns celulares isso
+102-  // deixava a barra inferior do modo mobile presa no landscape do modo TV.
+103-  // Reabrimos a MainActivity sem animação, já com force_tv_mode salvo e orientação pronta.
+104-  try{
+105-   Intent next=new Intent(this,MainActivity.class);
+=== MANIFEST ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ <uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/><uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/><uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+ <uses-feature android:name="android.software.leanback" android:required="false"/><uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+ <application android:theme="@style/AppTheme" android:label="GreenPlay" android:icon="@drawable/greenplay_app_icon" android:roundIcon="@drawable/greenplay_app_icon" android:largeHeap="true" android:banner="@drawable/tv_banner" android:usesCleartextTraffic="true" android:allowBackup="false" android:extractNativeLibs="true">
+  <meta-data android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME" android:value="fun.greenplay.app.CastOptionsProvider"/>
+  <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/></provider>
+  <service android:name=".OfflineDownloadService" android:exported="false" android:foregroundServiceType="dataSync"/>
+  <activity android:name=".PlayerActivity" android:screenOrientation="unspecified" android:configChanges="orientation|screenSize"/>
+  <activity android:name=".YouTubePlayerActivity" android:screenOrientation="unspecified" android:configChanges="orientation|screenSize"/>
+  <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="unspecified" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter></activity>
+ </application>
+</manifest>
