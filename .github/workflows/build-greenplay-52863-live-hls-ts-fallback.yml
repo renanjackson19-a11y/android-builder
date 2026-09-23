@@ -43,6 +43,7 @@ jobs:
           grep -q 'versionCode 52863' work/app/build.gradle
           grep -q 'video/mp2t' work/app/src/main/java/fun/greenplay/app/MainActivity.java
           grep -q 'retryLiveAsTs' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+          grep -q 'VLC/3.0.18 LibVLC/3.0.18' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
