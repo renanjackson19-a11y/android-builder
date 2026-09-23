@@ -1,0 +1,67 @@
+name: Build GreenPlay 5.28.78 Provider Picker Back
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52878-provider-picker-back.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download 5.28.76 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.76-centered-vpn-modal
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35877615598
+      - name: Apply provider picker fix
+        run: |
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52876_VPN_CENTER.zip -d work
+          python3 inspection/patch52878_provider_picker_back.py
+          grep -q 'versionCode 52878' work/app/build.gradle
+          grep -q 'boolean hasPreviousProvider' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'setContentDescription("Voltar")' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q 'wrap.setTranslationY(-dp(44))' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK=work/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          if command -v apkanalyzer >/dev/null 2>&1; then
+            apkanalyzer manifest debuggable "$APK" | tee /tmp/debuggable.txt
+            ! grep -qi '^true$' /tmp/debuggable.txt
+          fi
+      - name: Package
+        run: |
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.78-SERVER-BACK.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52878_SERVER_BACK.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          sha256sum out/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.78-provider-picker-back
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
