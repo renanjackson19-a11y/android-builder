@@ -32,6 +32,16 @@ s=s.replace(old,new,1)
 
 p.write_text(s)
 
+
+# Live TV providers may reject Referer/Origin from the app. Keep those headers
+# for VOD/series, but make live playback behave like a neutral media player.
+old='''  HashMap<String,String> requestHeaders=new HashMap<>();requestHeaders.put("Referer","https://greenplay.fun/");requestHeaders.put("Origin","https://greenplay.fun");DefaultHttpDataSource.Factory httpFactory=new DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36").setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(8000).setReadTimeoutMs(18000).setDefaultRequestProperties(requestHeaders);'''
+new='''  HashMap<String,String> requestHeaders=new HashMap<>();if(!live){requestHeaders.put("Referer","https://greenplay.fun/");requestHeaders.put("Origin","https://greenplay.fun");}String liveUa=live?"VLC/3.0.18 LibVLC/3.0.18":"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36";DefaultHttpDataSource.Factory httpFactory=new DefaultHttpDataSource.Factory().setUserAgent(liveUa).setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(8000).setReadTimeoutMs(18000).setDefaultRequestProperties(requestHeaders);'''
+assert old in s
+s=s.replace(old,new,1)
+
+p.write_text(s)
+
 p=Path("work/app/src/main/java/fun/greenplay/app/PlayerActivity.java")
 s=p.read_text()
 
