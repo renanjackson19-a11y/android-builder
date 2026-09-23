@@ -1,0 +1,172 @@
+=== PLAYER ===
+17-import androidx.media3.common.Player;
+18-import androidx.media3.common.VideoSize;
+19-import androidx.media3.datasource.DefaultDataSource;
+20-import androidx.media3.datasource.DefaultHttpDataSource;
+21-import androidx.media3.exoplayer.ExoPlayer;
+22-import androidx.media3.exoplayer.DefaultLoadControl;
+23-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+24-import androidx.media3.ui.AspectRatioFrameLayout;
+25-import androidx.media3.ui.PlayerView;
+26-
+27-public class PlayerActivity extends Activity{
+28- static final ArrayList<HashMap<String,String>> EPISODE_QUEUE=new ArrayList<>(); static int EPISODE_INDEX=-1;
+29- public static synchronized void setEpisodeQueue(ArrayList<HashMap<String,String>> q,int index){EPISODE_QUEUE.clear();if(q!=null)EPISODE_QUEUE.addAll(q);EPISODE_INDEX=index;}
+30- PlayerView playerView; ExoPlayer player; FrameLayout frame; LinearLayout controls; SeekBar seek; TextView time,play,displayModeButton; Handler h=new Handler(Looper.getMainLooper()); Runnable hideControlsTask; boolean live=false,prepared=false,switching=false,tickerStarted=false,episodeQueue=false,tvMode=false,forcePortrait=false,resumeAfterBackground=false,seekingTouch=false,shortsLandscapeCanvas=false; int sourceIndex=0,formatAttemptSource=-1,formatAttemptMask=0,formatMode=0,pendingSeek=0,bufferStarts=0,episodeIndex=-1,displayMode=0,pendingSeekProgress=-1; long lastBufferAt=0; final ArrayList<String> sources=new ArrayList<>();
+31- int green=Color.rgb(32,224,112); String seriesId="",episodeId="",episodeTitle="",seasonNumber="",episodeNumber="",movieId="",movieTitle="",moviePoster="",movieLandscape="",gpUserId="",gpDeviceId=""; long lastProgressSave=0; Runnable sessionBeat;
+32: public void onCreate(Bundle b){super.onCreate(b);tvMode=DeviceCompat.isTelevisionDevice(this);forcePortrait=getIntent()!=null&&getIntent().getBooleanExtra("force_portrait",false);setRequestedOrientation((!tvMode&&forcePortrait)?ActivityInfo.SCREEN_ORIENTATION_PORTRAIT:ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);applyImmersive();live=getIntent().getBooleanExtra("live",false);episodeQueue=getIntent().getBooleanExtra("episode_queue",false);episodeIndex=getIntent().getIntExtra("episode_index",EPISODE_INDEX);seriesId=nz(getIntent().getStringExtra("series_id"));episodeId=nz(getIntent().getStringExtra("episode_id"));episodeTitle=nz(getIntent().getStringExtra("episode_title"));seasonNumber=nz(getIntent().getStringExtra("season_number"));episodeNumber=nz(getIntent().getStringExtra("episode_number"));movieId=nz(getIntent().getStringExtra("movie_id"));movieTitle=nz(getIntent().getStringExtra("movie_title"));moviePoster=nz(getIntent().getStringExtra("movie_poster"));movieLandscape=nz(getIntent().getStringExtra("movie_landscape"));gpUserId=nz(getIntent().getStringExtra("gp_user_id"));gpDeviceId=nz(getIntent().getStringExtra("gp_device_id"));pendingSeek=Math.max(0,getIntent().getIntExtra("resume_ms",0));if(episodeQueue&&episodeIndex>=0){EPISODE_INDEX=episodeIndex;applyEpisodeMetadata();}build();startSessionHeartbeat();open();}
+33- String nz(String v){return v==null?"":v;}
+34- void applyImmersive(){try{getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);}catch(Exception ignored){}}
+35- @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus)applyImmersive();}
+36- void startSessionHeartbeat(){if(gpUserId.isEmpty()||gpDeviceId.isEmpty())return;sessionBeat=new Runnable(){public void run(){if(isFinishing())return;Api.post("stream_session",Api.m("user_id",gpUserId,"device_id",gpDeviceId,"action","heartbeat"),new Api.CB(){public void ok(org.json.JSONObject j){}public void err(String e){}});h.postDelayed(this,45000);}};h.postDelayed(sessionBeat,45000);}
+37- void releaseStreamSession(){if(gpUserId.isEmpty()||gpDeviceId.isEmpty())return;Api.post("stream_session",Api.m("user_id",gpUserId,"device_id",gpDeviceId,"action","release"),new Api.CB(){public void ok(org.json.JSONObject j){}public void err(String e){}});}
+38- int dp(int n){return(int)(n*getResources().getDisplayMetrics().density+.5f);} GradientDrawable bg(int c,int r){GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(dp(r));return g;}
+39- TextView tx(String s,int size){TextView t=new TextView(this);t.setText(s);t.setTextColor(Color.WHITE);t.setTextSize(size);t.setGravity(Gravity.CENTER);return t;}
+40- int tvFocusId(View v){if(v==null)return View.NO_ID;if(v.getId()==View.NO_ID)v.setId(View.generateViewId());return v.getId();}
+41- void tvLinkH(View left,View right){if(!tvMode||left==null||right==null)return;int a=tvFocusId(left),b=tvFocusId(right);left.setNextFocusRightId(b);right.setNextFocusLeftId(a);}
+42- void tvLinkV(View up,View down){if(!tvMode||up==null||down==null)return;int a=tvFocusId(up),b=tvFocusId(down);up.setNextFocusDownId(b);down.setNextFocusUpId(a);}
+43- GradientDrawable tvControlFocusBg(){GradientDrawable g=bg(0xee102019,14);g.setStroke(dp(3),green);return g;}
+44- void tvControl(View v){if(!tvMode||v==null)return;v.setFocusable(true);v.setFocusableInTouchMode(false);final android.graphics.drawable.Drawable normalBg=v.getBackground();v.setOnFocusChangeListener((x,has)->{x.animate().scaleX(has?1.06f:1f).scaleY(has?1.06f:1f).setDuration(90).start();if(android.os.Build.VERSION.SDK_INT>=21)x.setTranslationZ(has?dp(14):0);if(has){showControlsAndHold();x.setBackground(tvControlFocusBg());if(x instanceof TextView)((TextView)x).setTextColor(green);}else{x.setBackground(normalBg);if(x instanceof TextView)((TextView)x).setTextColor(Color.WHITE);}});}
+45- boolean insideControls(View v){if(v==null||controls==null)return false;View cur=v;while(cur!=null){if(cur==controls)return true;android.view.ViewParent p=cur.getParent();if(!(p instanceof View))break;cur=(View)p;}return false;}
+46- void showControlsAndHold(){if(controls==null)return;controls.setVisibility(View.VISIBLE);controls.bringToFront();h.removeCallbacks(hideControlsTask==null?()->{}:hideControlsTask);if(hideControlsTask==null)hideControlsTask=()->{if(controls==null)return;View f=getCurrentFocus();if(tvMode&&insideControls(f))return;if(!seekingTouch)controls.setVisibility(View.GONE);};h.removeCallbacks(hideControlsTask);h.postDelayed(hideControlsTask,tvMode?6500:5000);}
+47- void keepControlsVisible(){if(controls==null)return;controls.setVisibility(View.VISIBLE);controls.bringToFront();if(hideControlsTask!=null)h.removeCallbacks(hideControlsTask);}
+48- long durationMs(){try{if(player==null)return 0;long d=player.getDuration();return d==C.TIME_UNSET||d<0?0:d;}catch(Exception e){return 0;}}
+49- long positionMs(){try{return player==null?0:Math.max(0,player.getCurrentPosition());}catch(Exception e){return 0;}}
+50- void togglePlayback(){if(!prepared||player==null)return;if(player.isPlaying()){player.pause();play.setText("▶");}else{player.play();play.setText("Ⅱ");}}
+51- void seekBy(long ms){if(live||!prepared||player==null)return;long d=durationMs(),target=Math.max(0,positionMs()+ms);if(d>0)target=Math.min(Math.max(0,d-250),target);player.seekTo(target);updateProgressNow();}
+52- void seekFraction(int progress){if(live||!prepared||player==null)return;long d=durationMs();if(d<=0)return;long target=(long)(d*(Math.max(0,Math.min(1000,progress))/1000d));if(target>=d)target=Math.max(0,d-50);player.seekTo(target);updateProgressNow();}
+53- void applyDisplayMode(){
+54-  if(playerView==null)return;
+55-  playerView.setScaleX(1f);playerView.setScaleY(1f);
+56-  if(forcePortrait&&!tvMode&&displayMode==3){
+57-   // GreenShorts: muitos fornecedores entregam o vídeo vertical dentro de um canvas
+58-   // 16:9 com barras pretas. Em vez de usar ZOOM total (que corta a imagem), ampliamos
+59-   // somente o suficiente para o quadro vertical ficar grande e centralizado.
+60-   playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+61-   if(shortsLandscapeCanvas){playerView.setScaleX(2.88f);playerView.setScaleY(2.88f);}
+62-   if(displayModeButton!=null)displayModeButton.setText("▣ Tela");
+63-   return;
+64-  }
+65-  if(displayMode==1)playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
+66-  else if(displayMode==2)playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+67-  else playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+68-  if(displayModeButton!=null)displayModeButton.setText(displayMode==1?"▣ Zoom":displayMode==2?"▣ Preencher":"▣ Completo");
+69-  if(!forcePortrait)getSharedPreferences("gp",0).edit().putInt("player_display_mode",displayMode).apply();
+70- }
+71- void cycleDisplayMode(){if(forcePortrait&&!tvMode){displayMode=displayMode==3?0:(displayMode==0?1:3);}else displayMode=(displayMode+1)%3;applyDisplayMode();}
+72- void build(){frame=new FrameLayout(this);frame.setBackgroundColor(Color.BLACK);
+73-  displayMode=(forcePortrait&&!tvMode)?3:getSharedPreferences("gp",0).getInt("player_display_mode",0);if(displayMode<0||displayMode>3)displayMode=0;playerView=new PlayerView(this);playerView.setUseController(false);playerView.setShutterBackgroundColor(Color.BLACK);FrameLayout.LayoutParams vp=new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER);frame.addView(playerView,vp);
+74-  HashMap<String,String> requestHeaders=new HashMap<>();DefaultHttpDataSource.Factory httpFactory=new DefaultHttpDataSource.Factory().setUserAgent("VLC/3.0.18 LibVLC/3.0.18").setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(8000).setReadTimeoutMs(30000).setDefaultRequestProperties(requestHeaders);DefaultDataSource.Factory dataFactory=new DefaultDataSource.Factory(this,httpFactory);DefaultLoadControl loadControl=new DefaultLoadControl.Builder().setBufferDurationsMs(1200,30000,350,700).setPrioritizeTimeOverSizeThresholds(true).build();player=new ExoPlayer.Builder(this).setLoadControl(loadControl).setMediaSourceFactory(new DefaultMediaSourceFactory(dataFactory)).build();playerView.setPlayer(player);
+75-  TextView back=tx("‹",34);back.setBackground(bg(0x77000000,24));back.setOnClickListener(v->finish());FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(48),dp(48),Gravity.TOP|Gravity.LEFT);bp.setMargins(dp(14),dp(14),0,0);frame.addView(back,bp);
+76-  controls=new LinearLayout(this);controls.setOrientation(LinearLayout.VERTICAL);controls.setPadding(dp(12),dp(8),dp(12),dp(7));GradientDrawable controlsBg=bg(0xe30a0f0c,20);controlsBg.setStroke(dp(1),0x66415b4e);controls.setBackground(controlsBg);controls.setElevation(dp(12));
+77-  LinearLayout buttons=new LinearLayout(this);buttons.setGravity(Gravity.CENTER);TextView back10=tx("↶ 10s",forcePortrait?14:16);play=tx("Ⅱ",forcePortrait?25:27);TextView fwd10=tx("10s ↷",forcePortrait?14:16);displayModeButton=tx(forcePortrait?"▣ Tela":"▣ Completo",forcePortrait?13:14);back10.setBackground(bg(0x55131c17,14));play.setBackground(bg(0x77131c17,18));fwd10.setBackground(bg(0x55131c17,14));displayModeButton.setBackground(bg(0x55131c17,14));LinearLayout.LayoutParams b1=new LinearLayout.LayoutParams(0,dp(forcePortrait?42:48),1f);b1.setMargins(dp(3),0,dp(3),0);LinearLayout.LayoutParams b2=new LinearLayout.LayoutParams(0,dp(forcePortrait?42:48),1f);b2.setMargins(dp(3),0,dp(3),0);LinearLayout.LayoutParams b3=new LinearLayout.LayoutParams(0,dp(forcePortrait?42:48),1f);b3.setMargins(dp(3),0,dp(3),0);LinearLayout.LayoutParams b4=new LinearLayout.LayoutParams(0,dp(forcePortrait?42:48),1.16f);b4.setMargins(dp(3),0,dp(3),0);buttons.addView(back10,b1);buttons.addView(play,b2);buttons.addView(fwd10,b3);buttons.addView(displayModeButton,b4);controls.addView(buttons,new LinearLayout.LayoutParams(-1,dp(forcePortrait?44:50)));
+78-  LinearLayout progress=new LinearLayout(this);progress.setGravity(Gravity.CENTER_VERTICAL);time=tx("00:00",forcePortrait?12:13);time.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);progress.addView(time,new LinearLayout.LayoutParams(dp(forcePortrait?98:112),dp(34)));seek=new SeekBar(this);seek.setMax(1000);seek.setProgressTintList(android.content.res.ColorStateList.valueOf(green));seek.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff38443e));seek.setThumbTintList(android.content.res.ColorStateList.valueOf(green));progress.addView(seek,new LinearLayout.LayoutParams(0,dp(34),1));controls.addView(progress,new LinearLayout.LayoutParams(-1,dp(34)));FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(-1,dp(forcePortrait?88:96),Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);cp.setMargins(dp(forcePortrait?14:24),0,dp(forcePortrait?14:24),dp(forcePortrait?16:18));frame.addView(controls,cp);
+79-  applyDisplayMode();back10.setOnClickListener(v->{keepControlsVisible();seekBy(-10000);showControlsAndHold();});fwd10.setOnClickListener(v->{keepControlsVisible();seekBy(10000);showControlsAndHold();});play.setOnClickListener(v->{keepControlsVisible();togglePlayback();showControlsAndHold();});displayModeButton.setOnClickListener(v->{keepControlsVisible();cycleDisplayMode();showControlsAndHold();});if(tvMode){tvControl(back);tvControl(back10);tvControl(play);tvControl(fwd10);tvControl(displayModeButton);tvControl(seek);tvLinkH(back10,play);tvLinkH(play,fwd10);tvLinkH(fwd10,displayModeButton);tvLinkV(play,seek);tvLinkV(displayModeButton,seek);tvLinkV(back,play);play.postDelayed(()->play.requestFocus(),180);}seek.setEnabled(!live);seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar s,int p,boolean from){if(from&&!live){keepControlsVisible();pendingSeekProgress=p;long d=durationMs();if(d>0)time.setText(fmt((long)(d*(Math.max(0,Math.min(1000,p))/1000d)))+" / "+fmt(d));}}public void onStartTrackingTouch(SeekBar s){seekingTouch=true;keepControlsVisible();pendingSeekProgress=s.getProgress();}public void onStopTrackingTouch(SeekBar s){seekingTouch=false;if(pendingSeekProgress>=0)seekFraction(pendingSeekProgress);pendingSeekProgress=-1;updateProgressNow();showControlsAndHold();}});frame.setOnClickListener(v->{if(controls.getVisibility()==View.VISIBLE){if(hideControlsTask!=null)h.removeCallbacks(hideControlsTask);controls.setVisibility(View.GONE);}else{showControlsAndHold();}});setContentView(frame);showControlsAndHold();
+80- }
+81- @Override public boolean dispatchKeyEvent(KeyEvent e){if(tvMode&&e!=null&&e.getAction()==KeyEvent.ACTION_DOWN){int k=e.getKeyCode();boolean nav=k==KeyEvent.KEYCODE_DPAD_UP||k==KeyEvent.KEYCODE_DPAD_DOWN||k==KeyEvent.KEYCODE_DPAD_LEFT||k==KeyEvent.KEYCODE_DPAD_RIGHT||k==KeyEvent.KEYCODE_DPAD_CENTER||k==KeyEvent.KEYCODE_ENTER||k==KeyEvent.KEYCODE_NUMPAD_ENTER;if(nav){boolean wasHidden=controls!=null&&controls.getVisibility()!=View.VISIBLE;showControlsAndHold();if(wasHidden){if(play!=null)play.requestFocus();return true;}}if(k==KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE||k==KeyEvent.KEYCODE_MEDIA_PLAY||k==KeyEvent.KEYCODE_MEDIA_PAUSE){showControlsAndHold();togglePlayback();return true;}if(k==KeyEvent.KEYCODE_MEDIA_REWIND){showControlsAndHold();seekBy(-10000);return true;}if(k==KeyEvent.KEYCODE_MEDIA_FAST_FORWARD){showControlsAndHold();seekBy(10000);return true;}if(getCurrentFocus()==seek&&k==KeyEvent.KEYCODE_DPAD_LEFT){showControlsAndHold();seekBy(-10000);return true;}if(getCurrentFocus()==seek&&k==KeyEvent.KEYCODE_DPAD_RIGHT){showControlsAndHold();seekBy(10000);return true;}}return super.dispatchKeyEvent(e);}
+82- void open(){buildSources();if(sources.isEmpty()){Toast.makeText(this,"Não foi possível reproduzir este conteúdo.",Toast.LENGTH_LONG).show();return;}
+83-  player.addListener(new Player.Listener(){@Override public void onPlaybackStateChanged(int state){if(state==Player.STATE_READY){prepared=true;switching=false;bufferStarts=0;play.setText(player.isPlaying()?"Ⅱ":"▶");startTicker();updateProgressNow();}else if(state==Player.STATE_BUFFERING&&prepared&&!switching){long now=SystemClock.elapsedRealtime();bufferStarts=(now-lastBufferAt<30000)?bufferStarts+1:1;lastBufferAt=now;if(bufferStarts>=4&&!live)downgradeQuality();}else if(state==Player.STATE_ENDED){if(!live&&playNextEpisode())return;play.setText("▶");savePlaybackProgress(true);}}@Override public void onIsPlayingChanged(boolean isPlaying){if(play!=null)play.setText(isPlaying?"Ⅱ":"▶");}@Override public void onVideoSizeChanged(VideoSize v){if(forcePortrait&&!tvMode&&v!=null&&v.height>0){float par=v.pixelWidthHeightRatio<=0?1f:v.pixelWidthHeightRatio;float ar=(v.width*par)/(float)v.height;shortsLandscapeCanvas=ar>1.15f;if(displayMode==3)applyDisplayMode();}}@Override public void onPlayerError(PlaybackException error){if(retryAlternateFormat())return;if(sourceIndex+1<sources.size()){downgradeQuality();return;}Toast.makeText(PlayerActivity.this,"Não foi possível reproduzir este conteúdo.",Toast.LENGTH_LONG).show();}});
+84-  startSource(sourceIndex,pendingSeek);
+85- }
+86- void buildSources(){sources.clear();String def=null,q1080=null,q720=null,q480=null,q320=null;HashMap<String,String> ep=currentEpisode();if(ep!=null){def=ep.get("url");q1080=ep.get("url_1080");q720=ep.get("url_720");q480=ep.get("url_480");q320=ep.get("url_320");}else{def=getIntent().getStringExtra("url");q1080=getIntent().getStringExtra("url_1080");q720=getIntent().getStringExtra("url_720");q480=getIntent().getStringExtra("url_480");q320=getIntent().getStringExtra("url_320");}boolean cellular=isCellular();if(cellular){addSource(q720);addSource(q480);addSource(q320);addSource(q1080);}else{addSource(q1080);addSource(q720);addSource(q480);addSource(q320);}addSource(def);}
+87- HashMap<String,String> currentEpisode(){synchronized(PlayerActivity.class){if(!episodeQueue||episodeIndex<0||episodeIndex>=EPISODE_QUEUE.size())return null;return EPISODE_QUEUE.get(episodeIndex);}}
+88- boolean playNextEpisode(){savePlaybackProgress(true);synchronized(PlayerActivity.class){if(!episodeQueue||episodeIndex<0||episodeIndex+1>=EPISODE_QUEUE.size())return false;episodeIndex++;EPISODE_INDEX=episodeIndex;}applyEpisodeMetadata();sourceIndex=0;formatAttemptSource=-1;formatAttemptMask=0;formatMode=0;pendingSeek=0;bufferStarts=0;switching=false;prepared=false;buildSources();if(sources.isEmpty())return false;startSource(0,0);return true;}
+89- void applyEpisodeMetadata(){HashMap<String,String> ep=currentEpisode();if(ep==null)return;episodeId=nz(ep.get("id"));episodeTitle=nz(ep.get("title"));seasonNumber=nz(ep.get("season"));episodeNumber=nz(ep.get("episode"));}
+90- String resumeKey(){String provider=getSharedPreferences("gp",0).getString("provider_id","");return "series_resume_"+(provider+"_"+seriesId).replaceAll("[^a-zA-Z0-9._-]","_");}
+91- String movieResumeKey(){String provider=getSharedPreferences("gp",0).getString("provider_id","");return "movie_resume_"+(provider+"_"+movieId).replaceAll("[^a-zA-Z0-9._-]","_");}
+92- void savePlaybackProgress(boolean completed){if(live)return;int pos=safePosition();long dl=durationMs();int dur=dl>Integer.MAX_VALUE?Integer.MAX_VALUE:(int)Math.max(0,dl);android.content.SharedPreferences sp=getSharedPreferences("gp",0);if(!seriesId.isEmpty()&&!episodeId.isEmpty()){if(completed||(dur>0&&pos>=dur-3000)){sp.edit().remove(resumeKey()).apply();return;}if(pos<3000||dur<=0)return;try{org.json.JSONObject r=new org.json.JSONObject();r.put("episode_id",episodeId);r.put("episode_title",episodeTitle);r.put("season_number",seasonNumber);r.put("episode_number",episodeNumber);r.put("position",pos);r.put("duration",dur);r.put("updated_at",System.currentTimeMillis());sp.edit().putString(resumeKey(),r.toString()).apply();}catch(Exception ignored){}return;}if(movieId.isEmpty())return;if(completed||(dur>0&&pos>=dur-3000)){sp.edit().remove(movieResumeKey()).apply();return;}if(pos<3000||dur<=0)return;try{org.json.JSONObject r=new org.json.JSONObject();r.put("movie_id",movieId);r.put("movie_title",movieTitle);r.put("movie_poster",moviePoster);r.put("movie_landscape",movieLandscape);r.put("position",pos);r.put("duration",dur);r.put("updated_at",System.currentTimeMillis());sp.edit().putString(movieResumeKey(),r.toString()).apply();}catch(Exception ignored){}}
+93- void addSource(String u){if(u==null)return;u=u.trim();if(u.isEmpty()||sources.contains(u))return;sources.add(u);}
+94- boolean isCellular(){try{ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);android.net.NetworkInfo ni=cm==null?null:cm.getActiveNetworkInfo();return ni!=null&&ni.isConnected()&&ni.getType()==ConnectivityManager.TYPE_MOBILE;}catch(Exception e){return false;}}
+95- Uri sourceUri(String u){if(u==null)return Uri.EMPTY;u=u.trim();if(u.startsWith("/"))return Uri.fromFile(new java.io.File(u));return Uri.parse(u);}
+96- void startSource(int idx,int seekMs){if(idx<0||idx>=sources.size()||player==null)return;sourceIndex=idx;pendingSeek=Math.max(0,seekMs);prepared=false;switching=false;String u=sources.get(idx);try{player.stop();player.clearMediaItems();MediaItem.Builder mb=new MediaItem.Builder().setUri(sourceUri(u));if(formatAttemptSource==idx&&formatMode==1)mb.setMimeType("video/mp2t");else if(formatAttemptSource==idx&&formatMode==2)mb.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8);player.setMediaItem(mb.build());if(pendingSeek>0&&!live)player.seekTo(pendingSeek);pendingSeek=0;player.setPlayWhenReady(true);player.prepare();playerView.requestFocus();}catch(Exception e){if(retryAlternateFormat())return;if(sourceIndex+1<sources.size())downgradeQuality();else Toast.makeText(this,"Não foi possível reproduzir este conteúdo.",Toast.LENGTH_LONG).show();}}
+97- boolean retryAlternateFormat(){if(switching||sourceIndex<0||sourceIndex>=sources.size())return false;String u=sources.get(sourceIndex);if(u==null)return false;if(formatAttemptSource!=sourceIndex){formatAttemptSource=sourceIndex;formatAttemptMask=0;formatMode=0;}String path="";try{path=sourceUri(u).getPath();}catch(Exception ignored){}String low=(path==null?"":path).toLowerCase(java.util.Locale.US);boolean dottedHls=low.endsWith(".m3u8")||low.endsWith(".m3u");boolean bareHls=low.endsWith("/m3u8")||low.endsWith("/m3u")||low.equals("m3u8")||low.equals("m3u");boolean ts=low.endsWith(".ts")||low.endsWith("/ts")||low.equals("ts");boolean knownProgressive=low.endsWith(".mp4")||low.endsWith(".mkv")||low.endsWith(".avi")||low.endsWith(".webm")||low.endsWith(".mov")||low.endsWith(".m4v");int nextMode=0;if(dottedHls){if((formatAttemptMask&1)==0)nextMode=1;}else if(bareHls){if((formatAttemptMask&2)==0)nextMode=2;else if((formatAttemptMask&1)==0)nextMode=1;}else if(ts){if((formatAttemptMask&2)==0)nextMode=2;}else if(!knownProgressive){if((formatAttemptMask&2)==0)nextMode=2;else if((formatAttemptMask&1)==0)nextMode=1;}if(nextMode==0)return false;formatMode=nextMode;formatAttemptMask|=nextMode==1?1:2;switching=true;prepared=false;bufferStarts=0;final int idx=sourceIndex;final int pos=live?0:safePosition();h.postDelayed(()->{switching=false;startSource(idx,pos);},180);return true;}
+98- void downgradeQuality(){if(switching||sourceIndex+1>=sources.size())return;switching=true;int pos=live?0:safePosition();sourceIndex++;bufferStarts=0;h.postDelayed(()->startSource(sourceIndex,pos),120);}
+99- int safePosition(){long p=positionMs();return p>Integer.MAX_VALUE?Integer.MAX_VALUE:(int)p;}
+100- void updateProgressNow(){if(player==null||time==null||seek==null)return;long cur=positionMs(),dur=durationMs();time.setText(fmt(cur)+(live?"  •  AO VIVO":dur>0?" / "+fmt(dur):""));if(!live&&dur>0)seek.setProgress((int)Math.max(0,Math.min(1000,1000d*cur/dur)));}
+101- void startTicker(){if(tickerStarted)return;tickerStarted=true;h.postDelayed(new Runnable(){public void run(){if(isFinishing())return;if(player!=null&&prepared){if(!seekingTouch)updateProgressNow();if(!live&&(!seriesId.isEmpty()||!movieId.isEmpty())&&SystemClock.elapsedRealtime()-lastProgressSave>5000){lastProgressSave=SystemClock.elapsedRealtime();savePlaybackProgress(false);}}h.postDelayed(this,750);}},750);}
+102- String fmt(long ms){long total=Math.max(0,ms/1000),h=total/3600,m=(total%3600)/60,s=total%60;return h>0?String.format(java.util.Locale.US,"%d:%02d:%02d",h,m,s):String.format(java.util.Locale.US,"%02d:%02d",m,s);}
+103- @Override protected void onPause(){savePlaybackProgress(false);try{resumeAfterBackground=player!=null&&player.isPlaying();if(player!=null)player.pause();}catch(Exception ignored){}super.onPause();}
+104- @Override protected void onStop(){try{if(player!=null)player.pause();}catch(Exception ignored){}super.onStop();}
+105: @Override protected void onResume(){super.onResume();applyImmersive();if(resumeAfterBackground&&player!=null&&prepared){resumeAfterBackground=false;player.play();}}
+106- public void onDestroy(){savePlaybackProgress(false);releaseStreamSession();h.removeCallbacksAndMessages(null);try{if(player!=null){player.pause();player.release();player=null;}}catch(Exception ignored){}super.onDestroy();}
+107-}
+=== YOUTUBE ===
+33-        v.setFocusable(true);v.setFocusableInTouchMode(false);
+34-        final android.graphics.drawable.Drawable normal=v.getBackground();
+35-        v.setOnFocusChangeListener((x,has)->{
+36-            x.animate().scaleX(has?1.06f:1f).scaleY(has?1.06f:1f).setDuration(90).start();
+37-            if(android.os.Build.VERSION.SDK_INT>=21)x.setTranslationZ(has?dp(14):0);
+38-            if(has){showControls();x.setBackground(focusBg());if(x instanceof TextView)((TextView)x).setTextColor(green);}
+39-            else{x.setBackground(normal);if(x instanceof TextView)((TextView)x).setTextColor(Color.WHITE);}
+40-        });
+41-    }
+42-
+43:    @Override public void onCreate(Bundle b){
+44-        tvMode=(getIntent()!=null&&getIntent().getBooleanExtra("tv_mode",false))||DeviceCompat.isTelevisionDevice(this);
+45-        try{setRequestedOrientation(tvMode?ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE:ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);}catch(Exception ignored){}
+46-        super.onCreate(b);
+47-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
+48-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+49-        applyImmersive();
+50-
+51-        if(getIntent()!=null){videoId=getIntent().getStringExtra("youtube_id");String tt=getIntent().getStringExtra("title");if(tt!=null&&!tt.trim().isEmpty())videoTitle=tt.trim();String pp=getIntent().getStringExtra("poster");if(pp!=null)videoPoster=pp;resumeMs=Math.max(0,getIntent().getIntExtra("resume_ms",0));}
+52-        if(videoId==null)videoId="";
+53-        videoId=videoId.replaceAll("[^A-Za-z0-9_-]","");
+54-        if(videoId.isEmpty()){finish();return;}
+55-
+56-        build();
+57-        if(tvMode)root.postDelayed(()->{if(!isFinishing())loadPlayer();},140);else loadPlayer();
+58-        h.post(poll);
+59-        showControls();
+60-    }
+61-
+62-    void applyImmersive(){
+63-        try{getWindow().getDecorView().setSystemUiVisibility(
+64-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_FULLSCREEN|
+65-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|
+66-            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+67-        );}catch(Exception ignored){}
+68-    }
+69-
+70-    void build(){
+71-        root=new FrameLayout(this);root.setBackgroundColor(Color.BLACK);
+72-
+73-        web=new WebView(this);web.setBackgroundColor(Color.BLACK);web.setAlpha(tvMode?0f:1f);
+74-        WebSettings ws=web.getSettings();
+75-        ws.setJavaScriptEnabled(true);ws.setDomStorageEnabled(true);ws.setMediaPlaybackRequiresUserGesture(false);
+76-        ws.setLoadsImagesAutomatically(true);ws.setUseWideViewPort(true);ws.setLoadWithOverviewMode(true);
+77-        web.setWebChromeClient(new WebChromeClient());
+78-        web.setWebViewClient(new WebViewClient());
+79-        web.setLongClickable(false);web.setHapticFeedbackEnabled(false);
+80-        web.setOnLongClickListener(v->true);
+81-        web.setOnTouchListener((v,e)->true);
+82-        root.addView(web,new FrameLayout.LayoutParams(-1,-1));
+83-
+84-        if(!tvMode){
+85-            int screenH=getResources().getDisplayMetrics().heightPixels;
+86-            int topMaskH=Math.max(dp(48),Math.min(dp(82),(int)(screenH*0.09f)));
+87-            int bottomMaskH=Math.max(dp(64),Math.min(dp(110),(int)(screenH*0.11f)));
+88-            View topMask=new View(this);topMask.setBackgroundColor(Color.BLACK);
+89-            FrameLayout.LayoutParams topMaskLp=new FrameLayout.LayoutParams(-1,topMaskH,Gravity.TOP);root.addView(topMask,topMaskLp);
+90-            View bottomMask=new View(this);bottomMask.setBackgroundColor(Color.BLACK);
+91-            FrameLayout.LayoutParams bottomMaskLp=new FrameLayout.LayoutParams(-1,bottomMaskH,Gravity.BOTTOM);root.addView(bottomMask,bottomMaskLp);
+92-        }
+93-
+--
+198-            if(k==KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE||k==KeyEvent.KEYCODE_MEDIA_PLAY||k==KeyEvent.KEYCODE_MEDIA_PAUSE||k==KeyEvent.KEYCODE_DPAD_CENTER||k==KeyEvent.KEYCODE_ENTER||k==KeyEvent.KEYCODE_NUMPAD_ENTER){eval("gpToggle()");showControls();return true;}
+199-            if(k==KeyEvent.KEYCODE_MEDIA_REWIND||k==KeyEvent.KEYCODE_DPAD_LEFT){eval("gpSeekBy(-10)");showControls();return true;}
+200-            if(k==KeyEvent.KEYCODE_MEDIA_FAST_FORWARD||k==KeyEvent.KEYCODE_DPAD_RIGHT){eval("gpSeekBy(10)");showControls();return true;}
+201-            if(k==KeyEvent.KEYCODE_DPAD_UP||k==KeyEvent.KEYCODE_DPAD_DOWN){showControls();return true;}
+202-        }
+203-        return super.dispatchKeyEvent(e);
+204-    }
+205-
+206-    @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus)applyImmersive();}
+207-    @Override protected void onPause(){saveProgress();eval("if(ready)player.pauseVideo()");super.onPause();}
+208:    @Override protected void onResume(){super.onResume();applyImmersive();}
+209-    @Override protected void onDestroy(){
+210-        saveProgress();h.removeCallbacksAndMessages(null);
+211-        if(web!=null){try{web.stopLoading();web.loadUrl("about:blank");web.removeAllViews();web.destroy();}catch(Exception ignored){}web=null;}
+212-        super.onDestroy();
+213-    }
+214-}
