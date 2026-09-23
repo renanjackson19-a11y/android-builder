@@ -1,0 +1,40 @@
+name: Inspect GreenPlay 5.28.70 Startup
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52870-startup.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.70-exact-provider-counts
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35829657433
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52870_EXACT_PROVIDER_COUNTS.zip -d work
+          {
+            echo '=== MAIN TOP ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '1,220p'
+            echo '=== ONCREATE/ONRESUME ==='
+            grep -n -A90 -B20 -E 'void onCreate|void onResume|protected void onCreate|protected void onResume' work/app/src/main/java/fun/greenplay/app/MainActivity.java || true
+            echo '=== MANIFEST ==='
+            cat work/app/src/main/AndroidManifest.xml
+          } > inspection/startup_52870.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/startup_52870.txt
+          git commit -m "Inspect startup 5.28.70" || exit 0
+          git push
