@@ -1,0 +1,39 @@
+name: Inspect GreenPlay 5.28.66 Channel Loading
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52866-channel-loading.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.66-universal-stream-formats
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35819940050
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52866_UNIVERSAL_STREAM_FORMATS.zip -d work
+          {
+            grep -n -A120 -B30 'void tvLoadChannels' work/app/src/main/java/fun/greenplay/app/MainActivity.java || true
+            echo '=== ALL PAGES ==='
+            grep -n -A130 -B20 'void fetchAllLiveChannelPages' work/app/src/main/java/fun/greenplay/app/MainActivity.java || true
+            echo '=== MOBILE LIVE ==='
+            grep -n -A120 -B30 'void live' work/app/src/main/java/fun/greenplay/app/MainActivity.java | head -n 500 || true
+          } > inspection/channel_loading_52866.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/channel_loading_52866.txt
+          git commit -m "Inspect channel loading 5.28.66" || exit 0
+          git push
