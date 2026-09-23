@@ -400,7 +400,7 @@ for p in JAVA.glob("*.java"):
 # sources that still use HTTP or unusual TLS.
 m=MANIFEST.read_text()
 old='android:usesCleartextTraffic="true" android:allowBackup="false"'
-new='android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/network_security_config" android:debuggable="false" android:allowBackup="false"'
+new='android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/network_security_config" android:allowBackup="false"'
 assert old in m
 m=m.replace(old,new,1)
 m=m.replace('<activity android:name=".PlayerActivity" ', '<activity android:name=".PlayerActivity" android:exported="false" ',1)
