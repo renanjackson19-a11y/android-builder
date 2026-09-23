@@ -1,0 +1,66 @@
+name: Build GreenPlay 5.28.66 Universal Stream Formats
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52866-universal-stream-formats.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download 5.28.65 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.65-greenshorts-detail-clean
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35818254592
+      - name: Patch source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52865_GREENSHORTS_DETAIL_CLEAN.zip -d work
+          python3 inspection/patch52866_universal_stream_formats.py
+          grep -q 'versionCode 52866' work/app/build.gradle
+          grep -q 'retryAlternateFormat' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+          grep -q 'tvInlineHlsFallbackIndex' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -q 'if(bufferStarts>=2&&!retryAsTs())' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.66-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52866_UNIVERSAL_STREAM_FORMATS.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52866_UNIVERSAL_STREAM_FORMATS.zip >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.66-universal-stream-formats
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
