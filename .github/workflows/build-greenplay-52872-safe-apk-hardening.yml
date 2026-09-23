@@ -33,7 +33,7 @@ jobs:
         with:
           name: GreenPlay-5.28.70-exact-provider-counts
           path: base_artifact
-          github-token: \${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: 35829657433
 
       - name: Patch only APK-side protections
