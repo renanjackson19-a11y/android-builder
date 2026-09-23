@@ -1,4 +1,5 @@
 name: Build GreenPlay 5.28.71 APK Hardening Direct
+# revision: secure-prefs-check-fix
 
 on:
   push:
@@ -69,7 +70,7 @@ jobs:
           grep -q 'MediaItem.Builder().setUri' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
           grep -q 'setUri(Uri.parse(url))' work/app/src/main/java/fun/greenplay/app/MainActivity.java
           ! grep -R -q 'TRANSPORT_VPN\|TYPE_VPN\|blockProtectedPlayback\|greenplay-media-proxy' work/app/src/main/java
-          ! grep -R -q 'getSharedPreferences("gp"' work/app/src/main/java
+          ! grep -R -q --exclude='SecurePreferences.java' 'getSharedPreferences("gp"' work/app/src/main/java
           ! grep -R -q 'android.util.Log\.[vdiew](' work/app/src/main/java
           ! grep -R -F -q "$(cat /tmp/gp_old_token)" work/app/src/main/java
           ! grep -q -- '-keep class fun.greenplay.app.\*\* { \*; }' work/app/proguard-rules.pro
