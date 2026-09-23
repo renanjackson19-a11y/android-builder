@@ -1,0 +1,42 @@
+name: Inspect GreenPlay 5.28.68 Login Provider UI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52868-login-provider.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.68-catalog-reclass-cache-reset
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35823832983
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52868_CATALOG_RECLASS_CACHE_RESET.zip -d work
+          {
+            echo '=== PROVIDER COUNT ==='
+            grep -n -A55 -B15 'int providerCount' work/app/src/main/java/fun/greenplay/app/MainActivity.java || true
+            echo
+            echo '=== LOGIN/REGISTER TEXT ==='
+            grep -RIn -E 'Criar conta|Cadastre|Cadastro|Registrar|register|login|Entrar|teste grátis|Teste grátis' work/app/src/main/java work/app/src/main/res | head -n 500 || true
+            echo
+            echo '=== SCREEN METHODS ==='
+            grep -n -E 'showLogin|showRegister|register|cadastro|createAccount|loginScreen' work/app/src/main/java/fun/greenplay/app/MainActivity.java | head -n 220 || true
+          } > inspection/login_provider_52868.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/login_provider_52868.txt
+          git commit -m "Inspect login and provider UI 5.28.68" || exit 0
+          git push
