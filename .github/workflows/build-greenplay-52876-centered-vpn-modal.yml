@@ -1,0 +1,57 @@
+name: Build GreenPlay 5.28.76 Centered VPN Modal
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52876-centered-vpn-modal.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download 5.28.75 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.75-native-vpn-dialog
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35876382210
+      - name: Apply centered modal
+        run: |
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52875_VPN_UI.zip -d work
+          python3 inspection/patch52876_centered_vpn_modal.py
+          grep -q 'versionCode 52876' work/app/build.gradle
+          grep -q 'setWindowAnimations(0)' work/app/src/main/java/fun/greenplay/app/VpnBlockDialog.java
+          grep -q 'setPivotX(card.getWidth()/2f)' work/app/src/main/java/fun/greenplay/app/VpnBlockDialog.java
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package
+        run: |
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.76-VPN-CENTER.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52876_VPN_CENTER.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          sha256sum out/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.76-centered-vpn-modal
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
