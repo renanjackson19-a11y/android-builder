@@ -1,0 +1,32 @@
+name: Transfer Espaco 2 APK
+
+on:
+  push:
+    branches:
+      - chatgpt-espaco2-transfer-20260923
+
+permissions:
+  contents: read
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download APK from VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 --max-time 180 \
+            "https://greenplay.fun/Espaco_2_MULTI_FOTO_FIX.apk" \
+            -o Espaco_2_MULTI_FOTO_FIX.apk
+          echo "191043a5003d46a42ca4b154e65c9093c231f22c3876010f270ed515140455b8  Espaco_2_MULTI_FOTO_FIX.apk" | sha256sum -c -
+          ls -lh Espaco_2_MULTI_FOTO_FIX.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: espaco2-multi-foto-fix
+          path: Espaco_2_MULTI_FOTO_FIX.apk
+          compression-level: 0
+          retention-days: 1
