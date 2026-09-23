@@ -1,0 +1,42 @@
+name: Inspect GreenPlay 5.28.70 Network Guard Points
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52870-network-guard.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.70-exact-provider-counts
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35829657433
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52870_EXACT_PROVIDER_COUNTS.zip -d work
+          {
+            echo '=== MAIN TOP ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '1,135p'
+            echo '=== TV SELECT ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '2160,2265p'
+            echo '=== ONLINE PLAYER ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '3010,3055p'
+            echo '=== PLAYER TOP ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/PlayerActivity.java | sed -n '1,125p'
+          } > inspection/network_guard_points_52870.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/network_guard_points_52870.txt
+          git commit -m "Inspect network guard points 5.28.70" || exit 0
+          git push
