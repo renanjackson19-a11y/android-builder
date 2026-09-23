@@ -439,6 +439,7 @@ assert 'greenplay-media-proxy' not in alljava
 assert 'blockProtectedPlayback' not in alljava
 assert 'MediaItem.Builder().setUri' in (JAVA/"PlayerActivity.java").read_text()
 assert 'setUri(Uri.parse(url))' in (JAVA/"MainActivity.java").read_text()
-assert 'getSharedPreferences("gp"' not in alljava
+legacy_prefs="\n".join(p.read_text() for p in JAVA.glob("*.java") if p.name!="SecurePreferences.java")
+assert 'getSharedPreferences("gp"' not in legacy_prefs
 assert token not in alljava
 assert base not in (JAVA/"Api.java").read_text()
