@@ -1,0 +1,65 @@
+name: Build GreenPlay 5.28.71 VPN Capture Guard
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52871-vpn-capture-guard.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download 5.28.70 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.70-exact-provider-counts
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35829657433
+      - name: Patch source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52870_EXACT_PROVIDER_COUNTS.zip -d work
+          python3 inspection/patch52871_vpn_capture_guard.py
+          grep -q 'versionCode 52871' work/app/build.gradle
+          grep -q 'class NetworkGuard' work/app/src/main/java/fun/greenplay/app/NetworkGuard.java
+          grep -q 'Proteção de conexão' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'NetworkGuard.isVpnOrCaptureActive' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.71-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52871_VPN_CAPTURE_GUARD.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52871_VPN_CAPTURE_GUARD.zip >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.71-vpn-capture-guard
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
