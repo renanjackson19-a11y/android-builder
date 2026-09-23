@@ -1,0 +1,22 @@
+name: Espaco2 Transfer 4.0.3
+on:
+  push:
+    branches:
+      - espaco2-transfer-403
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild APK
+        run: |
+          cat transfers/espaco403/part*.b64 | tr -d '\n\r ' | base64 -d > Espaco_2_4.0.3_GALERIA_FIX.apk
+          echo "e32b23f9c42b119036ff38c9c5c0ac1532ec2bdc4e7397b5cc7515690b232c1f  Espaco_2_4.0.3_GALERIA_FIX.apk" | sha256sum -c -
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Espaco_2_4.0.3_GALERIA_FIX
+          path: Espaco_2_4.0.3_GALERIA_FIX.apk
+          if-no-files-found: error
+          retention-days: 1
