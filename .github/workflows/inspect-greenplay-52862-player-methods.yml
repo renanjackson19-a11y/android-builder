@@ -1,0 +1,40 @@
+name: Inspect GreenPlay 5.28.62 Player Methods
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52862-player-methods.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.62-cast-hotfix
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35803127224
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52862_CAST_HOTFIX.zip -d work
+          {
+            echo '=== MainActivity 2194-2238 ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '2194,2238p'
+            echo
+            echo '=== PlayerActivity 1-125 ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/PlayerActivity.java | sed -n '1,125p'
+          } > inspection/player52862_methods.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/player52862_methods.txt
+          git commit -m "Inspect 5.28.62 player methods" || exit 0
+          git push
