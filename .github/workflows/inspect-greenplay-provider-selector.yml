@@ -1,0 +1,36 @@
+name: Inspect GreenPlay Provider Selector
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-provider-selector.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.65-greenshorts-detail-clean
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35818254592
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52865_GREENSHORTS_DETAIL_CLEAN.zip -d work
+          {
+            echo '=== PROVIDER MATCHES ==='
+            grep -RIn -E 'get_providers|greenplay_providers_json|has_live|has_movies|has_series|channels_count|live_count|provider_id|Alterar servidor|Servidor|providerList|providersJson' work/app/src/main/java || true
+          } > inspection/provider_selector_52865.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/provider_selector_52865.txt
+          git commit -m "Inspect provider selector 5.28.65" || exit 0
+          git push
