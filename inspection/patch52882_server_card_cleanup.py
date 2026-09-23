@@ -47,8 +47,8 @@ assert old in s
 s=s.replace(old,new,1)
 
 # Cards can now be a little more compact because pills are gone.
-old='''  LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(82));lp.setMargins(0,0,0,dp(9));host.addView(card,lp);'''
-new='''  LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(74));lp.setMargins(0,0,0,dp(9));host.addView(card,lp);'''
+old='LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(82));lp.setMargins(0,0,0,dp(9));host.addView(card,lp);'
+new='LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(74));lp.setMargins(0,0,0,dp(9));host.addView(card,lp);'
 assert old in s
 s=s.replace(old,new,1)
 
