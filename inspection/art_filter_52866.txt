@@ -1,0 +1,61 @@
+856-   JSONArray sections=j==null?null:j.optJSONArray("result");
+857-   if(sections!=null)for(int i=0;i<sections.length()&&background.size()<96;i++){
+858-    JSONObject sec=sections.optJSONObject(i);if(sec==null)continue;int vt=sec.optInt("type_id",sec.optInt("video_type",1));if(vt!=1&&vt!=2)continue;
+859-    JSONArray data=sec.optJSONArray("data");if(data==null)continue;
+860-    for(int k=0;k<data.length()&&k<4&&background.size()<96;k++){
+861-     JSONObject source=data.optJSONObject(k);if(source==null)continue;
+862-     JSONObject x=mergeDetailJson(source,readDetailCache(source));if(x==null)x=source;
+863-     String poster=detailValue(x,"thumbnail","portrait_img","image","poster","backdrop","landscape","landscape_img");
+864-     String land=detailValue(x,"landscape","landscape_img","backdrop","poster","thumbnail");
+865-     if(!poster.isEmpty()&&seen.add(poster)){background.add(poster);if(k<2&&critical.size()<20)critical.add(poster);}
+866-     if(i<6&&k==0&&!land.isEmpty()&&seen.add(land)){background.add(land);if(critical.size()<20)critical.add(land);}
+867-    }
+868-   }
+869-  }catch(Exception ignored){}
+870-  if(critical.isEmpty()){done.run();return;}
+871-  Img.prefetchCritical(this,critical,Math.min(20,critical.size()),4200,()->{done.run();Img.prefetchBackground(this,background);});
+872- }
+873- void prefetchRowImages(JSONArray a){if(a==null)return;java.util.ArrayList<String> urls=new java.util.ArrayList<>();for(int i=0;i<a.length()&&i<12;i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;String u=x.optString("thumbnail",x.optString("portrait_img",x.optString("image","")));if(!u.isEmpty())urls.add(u);}Img.prefetchBackground(this,urls);}
+874- // 5.28 TMDB DIRETO: a fonte nunca decide a arte de filmes/séries.
+875- // O card só usa arte já confirmada pelo cache TMDB ou pelo content_enrich.
+876: void stripUnverifiedCatalogArt(JSONObject rootJson){
+877-  try{JSONArray sections=rootJson==null?null:rootJson.optJSONArray("result");if(sections==null)return;for(int i=0;i<sections.length();i++){JSONObject sec=sections.optJSONObject(i);if(sec==null)continue;int vt=sec.optInt("type_id",sec.optInt("video_type",1));if(vt!=1&&vt!=2)continue;JSONArray data=sec.optJSONArray("data");if(data==null)continue;for(int k=0;k<data.length()&&k<24;k++){JSONObject x=data.optJSONObject(k);if(x==null)continue;if(x.optInt("tmdb_id",0)>0)continue;String[] art={"thumbnail","portrait_img","image","landscape","landscape_img","poster","backdrop","cover"};for(String key:art)x.put(key,"");}}}catch(Exception ignored){}
+878- }
+879- void applyTmdbCard(JSONObject dst,JSONObject src){
+880-  if(dst==null||src==null)return;String[] keys={"name","title","thumbnail","portrait_img","image","landscape","landscape_img","poster","backdrop","description","genre","category_name","rating","imdb_rating","tmdb_id","release_date"};for(String key:keys){try{if(!src.has(key))continue;Object v=src.opt(key);if(v==null)continue;if(v instanceof String&&((String)v).trim().isEmpty())continue;dst.put(key,v);}catch(Exception ignored){}}
+881- }
+882- java.util.ArrayList<JSONObject> collectCriticalTmdbCards(JSONObject rootJson){
+883-  java.util.ArrayList<JSONObject> out=new java.util.ArrayList<>();java.util.HashSet<String> seen=new java.util.HashSet<>();try{JSONArray sections=rootJson==null?null:rootJson.optJSONArray("result");if(sections==null)return out;for(int wanted=1;wanted<=2;wanted++){int usedSections=0;for(int i=0;i<sections.length()&&usedSections<4;i++){JSONObject sec=sections.optJSONObject(i);if(sec==null)continue;int t=sec.optInt("type_id",sec.optInt("video_type",1));if(t!=wanted)continue;JSONArray a=sec.optJSONArray("data");if(a==null||a.length()==0)continue;usedSections++;for(int k=0;k<Math.min(3,a.length());k++){JSONObject x=a.optJSONObject(k);if(x==null)continue;String key=detailCacheKey(x);if(seen.add(key))out.add(x);}}}}catch(Exception ignored){}return out;
+884- }
+885- 
+886- void prepareHomeThenShell(TextView msg,Button action){
+887-  if(msg!=null){msg.setTextColor(0xffa8b8b0);msg.setText("Sincronizando capas e conteúdo…");}
+888-  fetchPreparedHome(-1,-1,new PreparedHomeCB(){public void ok(JSONObject j){
+889-   JSONArray a=j.optJSONArray("result");
+890-   if(a!=null&&a.length()>0){
+891-    stripUnverifiedCatalogArt(j);saveHomeCache(j);sp.edit().putBoolean(homeExtrasKey(),false).apply();homeExtrasStarted=false;
+892-    // Resolve cards visiveis ainda sem arte e baixa as imagens antes de abrir.
+893-    prepareCriticalDetails(j,()->warmHomeImages(j,()->{saveHomeCache(j);shell();prefetchDetailsFromCatalog(j,18);}));
+894-   }else shell();
+895-  }public void err(String e){shell();}});
+896- }
+897- 
+898- void prepareCriticalDetails(JSONObject rootJson,Runnable done){
+899-  // 5.28.12: nunca bloquear a abertura esperando content_detail. O servidor já
+900-  // entrega o que tem; o restante é enriquecido depois que a Home está utilizável.
+901-  if(rootJson!=null)saveHomeCache(rootJson);
+902-  if(done!=null)done.run();
+903-  if(rootJson!=null)new Handler(Looper.getMainLooper()).postDelayed(()->{
+904-   if(!isFinishing())prefetchDetailsFromCatalog(rootJson,16);
+905-  },300);
+906- }
+907-
+908- void prepareCriticalDetailsBatch(JSONObject rootJson,java.util.ArrayList<JSONObject> pending,int start,java.util.concurrent.atomic.AtomicBoolean delivered,Handler h,Runnable finish){
+909-  if(delivered.get())return;
+910-  if(start>=pending.size()){h.removeCallbacks(finish);finish.run();return;}
+911-  final int end=Math.min(start+4,pending.size());final int[] left={end-start};
+912-  for(int i=start;i<end;i++){
+913-   final JSONObject x=pending.get(i);int vt=x.optInt("video_type",x.optInt("type_id",1));String vid=x.optString("id",x.optString("video_id",""));
+914-   if(vid.trim().isEmpty()){if(--left[0]<=0)prepareCriticalDetailsBatch(rootJson,pending,end,delivered,h,finish);continue;}
+915-   Api.post("content_detail",Api.m("user_id",uid,"video_id",vid,"video_type",String.valueOf(vt)),new Api.CB(){
+916-    void next(){if(--left[0]<=0)prepareCriticalDetailsBatch(rootJson,pending,end,delivered,h,finish);}
