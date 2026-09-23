@@ -1,0 +1,64 @@
+name: Build GreenPlay 5.28.65 GreenShorts Detail Clean
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52865-greenshorts-detail-clean.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download 5.28.64 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.64-universal-m3u-fix
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35810643844
+      - name: Patch source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52864_UNIVERSAL_M3U_FIX.zip -d work
+          python3 inspection/patch52865_greenshorts_detail_clean.py
+          grep -q 'versionCode 52865' work/app/build.gradle
+          ! grep -q 'if(isYoutube)renderGreenShortsResume(source,host,displayTitle)' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.65-debug.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52865_GREENSHORTS_DETAIL_CLEAN.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52865_GREENSHORTS_DETAIL_CLEAN.zip >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.65-greenshorts-detail-clean
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
