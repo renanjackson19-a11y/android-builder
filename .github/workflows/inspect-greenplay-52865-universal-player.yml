@@ -1,0 +1,45 @@
+name: Inspect GreenPlay 5.28.65 Universal Player
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-greenplay-52865-universal-player.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.65-greenshorts-detail-clean
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35818254592
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52865_GREENSHORTS_DETAIL_CLEAN.zip -d work
+          {
+            echo '=== MAIN PLAYER FIELDS/METHODS ==='
+            grep -n -E 'tvInlineTsFallbackIndex|recoverTvInline|STATE_BUFFERING|onPlayerError|setMimeType|startTvInlineSource|tvInlineRecoveryCount' work/app/src/main/java/fun/greenplay/app/MainActivity.java || true
+            echo
+            echo '=== PLAYER ACTIVITY ==='
+            grep -n -E 'tsFallbackSource|retryAsTs|STATE_BUFFERING|onPlayerError|setMimeType|startSource|downgradeQuality|DefaultHttpDataSource' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java || true
+            echo
+            echo '=== PLAYER ACTIVITY 35-120 ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/PlayerActivity.java | sed -n '35,125p'
+            echo
+            echo '=== MAIN 2185-2255 ==='
+            nl -ba work/app/src/main/java/fun/greenplay/app/MainActivity.java | sed -n '2185,2255p'
+          } > inspection/player52865_universal.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add inspection/player52865_universal.txt
+          git commit -m "Inspect 5.28.65 universal playback" || exit 0
+          git push
