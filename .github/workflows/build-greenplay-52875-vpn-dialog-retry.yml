@@ -1,0 +1,91 @@
+name: Build GreenPlay 5.28.75 GreenPlay VPN Dialog Retry
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52875-vpn-dialog-retry.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.74 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.74-robust-vpn
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35873860102
+
+      - name: Apply GreenPlay VPN dialog
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out apkcheck
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52874_VPN_DETECT.zip -d work
+          python3 inspection/patch52875_greenplay_vpn_dialog.py
+
+          grep -q 'versionCode 52875' work/app/build.gradle
+          grep -q "versionName '5.28.75'" work/app/build.gradle
+          test -s work/app/src/main/java/fun/greenplay/app/VpnNoticeDialog.java
+          grep -q '0xff0d1712' work/app/src/main/java/fun/greenplay/app/VpnNoticeDialog.java
+          grep -q '0xff20e070' work/app/src/main/java/fun/greenplay/app/VpnNoticeDialog.java
+          grep -q 'Tentar novamente' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -n 'AlertDialog.Builder(this).setTitle("VPN detectada")' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -n 'AlertDialog.Builder' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+          ! grep -RInE 'greenplay-media-proxy|/media/p/|:8770' work/app/src/main/java work/app/src/main/res
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=work/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          mkdir -p apkcheck
+          unzip -q "$APK" 'classes*.dex' -d apkcheck
+          if find apkcheck -name 'classes*.dex' -print0 | xargs -0 strings -a | grep -Fq '454946ee403e82a9657eafc76091ccb6d8ccd4a8fadfca45'; then exit 1; fi
+          if find apkcheck -name 'classes*.dex' -print0 | xargs -0 strings -a | grep -Eqi 'greenplay-media-proxy|/media/p/|:8770'; then exit 1; fi
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.75-VPN-UI.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52875_VPN_UI.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52875_VPN_UI.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.75-vpn-ui
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
