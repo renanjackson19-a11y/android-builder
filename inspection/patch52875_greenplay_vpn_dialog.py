@@ -172,7 +172,7 @@ new=''' void showVpnBlocked(boolean startup){
   try{if(vpnBlockDialog!=null&&vpnBlockDialog.isShowing())return;}catch(Exception ignored){}
   final boolean startupNow=vpnStartupBlocked;
   android.app.Dialog d=VpnNoticeDialog.show(this,
-   "Desative a VPN para usar o GreenPlay.\nEnquanto a VPN estiver ativa, Filmes, Séries e Canais ficam bloqueados.",
+   "Desative a VPN para usar o GreenPlay.\\nEnquanto a VPN estiver ativa, Filmes, Séries e Canais ficam bloqueados.",
    true,"Tentar novamente",
    ()->{vpnBlockDialog=null;if(SecurityGuard.vpnActive(this)){new Handler(Looper.getMainLooper()).postDelayed(()->showVpnBlocked(vpnStartupBlocked),180);}else{boolean restart=vpnStartupBlocked;vpnStartupBlocked=false;if(restart)recreate();else startVpnWatch();}},
    ()->{vpnBlockDialog=null;try{finishAndRemoveTask();}catch(Exception e){finish();}});
