@@ -1,5 +1,5 @@
 name: Build GreenPlay 5.28.66 Universal Stream Formats
-# finite-format-fallback
+# finite-format-fallback-2
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
           python3 inspection/patch52866_universal_stream_formats.py
           grep -q 'versionCode 52866' work/app/build.gradle
           grep -q 'retryAlternateFormat' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
-          grep -q 'tvInlineHlsFallbackIndex' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'tvInlineFormatAttemptMask' work/app/src/main/java/fun/greenplay/app/MainActivity.java
           ! grep -q 'if(bufferStarts>=2&&!retryAsTs())' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
       - uses: gradle/actions/setup-gradle@v4
         with:
