@@ -7,6 +7,7 @@ assert "versionName '5.28.62'" in s
 s=s.replace("versionCode 52862","versionCode 52863",1).replace("versionName '5.28.62'","versionName '5.28.63'",1)
 g.write_text(s)
 
+# Main TV/live inline player
 p=Path("work/app/src/main/java/fun/greenplay/app/MainActivity.java")
 s=p.read_text()
 
@@ -32,21 +33,17 @@ s=s.replace(old,new,1)
 
 p.write_text(s)
 
-
-# Live TV providers may reject Referer/Origin from the app. Keep those headers
-# for VOD/series, but make live playback behave like a neutral media player.
-old='''  HashMap<String,String> requestHeaders=new HashMap<>();requestHeaders.put("Referer","https://greenplay.fun/");requestHeaders.put("Origin","https://greenplay.fun");DefaultHttpDataSource.Factory httpFactory=new DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36").setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(8000).setReadTimeoutMs(18000).setDefaultRequestProperties(requestHeaders);'''
-new='''  HashMap<String,String> requestHeaders=new HashMap<>();if(!live){requestHeaders.put("Referer","https://greenplay.fun/");requestHeaders.put("Origin","https://greenplay.fun");}String liveUa=live?"VLC/3.0.18 LibVLC/3.0.18":"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36";DefaultHttpDataSource.Factory httpFactory=new DefaultHttpDataSource.Factory().setUserAgent(liveUa).setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(8000).setReadTimeoutMs(18000).setDefaultRequestProperties(requestHeaders);'''
-assert old in s
-s=s.replace(old,new,1)
-
-p.write_text(s)
-
+# Fullscreen/general player
 p=Path("work/app/src/main/java/fun/greenplay/app/PlayerActivity.java")
 s=p.read_text()
 
 old='''boolean live=false,prepared=false,switching=false,tickerStarted=false,episodeQueue=false,tvMode=false,forcePortrait=false,resumeAfterBackground=false,seekingTouch=false,shortsLandscapeCanvas=false; int sourceIndex=0,pendingSeek=0,bufferStarts=0,episodeIndex=-1,displayMode=0,pendingSeekProgress=-1;'''
 new='''boolean live=false,prepared=false,switching=false,tickerStarted=false,episodeQueue=false,tvMode=false,forcePortrait=false,resumeAfterBackground=false,seekingTouch=false,shortsLandscapeCanvas=false; int sourceIndex=0,tsFallbackSource=-1,pendingSeek=0,bufferStarts=0,episodeIndex=-1,displayMode=0,pendingSeekProgress=-1;'''
+assert old in s
+s=s.replace(old,new,1)
+
+old='''  HashMap<String,String> requestHeaders=new HashMap<>();requestHeaders.put("Referer","https://greenplay.fun/");requestHeaders.put("Origin","https://greenplay.fun");DefaultHttpDataSource.Factory httpFactory=new DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36").setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(8000).setReadTimeoutMs(18000).setDefaultRequestProperties(requestHeaders);'''
+new='''  HashMap<String,String> requestHeaders=new HashMap<>();if(!live){requestHeaders.put("Referer","https://greenplay.fun/");requestHeaders.put("Origin","https://greenplay.fun");}String liveUa=live?"VLC/3.0.18 LibVLC/3.0.18":"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36";DefaultHttpDataSource.Factory httpFactory=new DefaultHttpDataSource.Factory().setUserAgent(liveUa).setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(8000).setReadTimeoutMs(18000).setDefaultRequestProperties(requestHeaders);'''
 assert old in s
 s=s.replace(old,new,1)
 
