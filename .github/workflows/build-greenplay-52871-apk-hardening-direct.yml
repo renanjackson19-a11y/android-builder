@@ -1,0 +1,126 @@
+name: Build GreenPlay 5.28.71 APK Hardening Direct
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52871-apk-hardening-direct.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download exact 5.28.70 base
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.70-exact-provider-counts
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35829657433
+
+      - name: Apply APK-only hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir work
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52870_EXACT_PROVIDER_COUNTS.zip -d work
+          python3 - <<'PY' >/tmp/gp_old_token
+          import re
+          s=open('work/app/src/main/java/fun/greenplay/app/Api.java').read()
+          m=re.search(r'static final String TOKEN="([^"]+)";',s)
+          assert m
+          print(m.group(1),end='')
+          PY
+          python3 inspection/patch52871_apk_hardening_direct.py
+
+      - name: Static safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode 52871" work/app/build.gradle
+          grep -q "versionName '5.28.71'" work/app/build.gradle
+          grep -q "debuggable false" work/app/build.gradle
+          grep -q "minifyEnabled true" work/app/build.gradle
+          grep -q 'android:debuggable="false"' work/app/src/main/AndroidManifest.xml
+          grep -q 'android:networkSecurityConfig="@xml/network_security_config"' work/app/src/main/AndroidManifest.xml
+          grep -q 'cleartextTrafficPermitted="true"' work/app/src/main/res/xml/network_security_config.xml
+          grep -q '<domain includeSubdomains="true">greenplay.fun</domain>' work/app/src/main/res/xml/network_security_config.xml
+          grep -q 'SecurePreferences.get(this)' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'SecureStore.encryptedOutput' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'SecureStore.encryptedInput' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'MediaItem.Builder().setUri' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
+          grep -q 'setUri(Uri.parse(url))' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          ! grep -R -q 'TRANSPORT_VPN\|TYPE_VPN\|blockProtectedPlayback\|greenplay-media-proxy' work/app/src/main/java
+          ! grep -R -q 'getSharedPreferences("gp"' work/app/src/main/java
+          ! grep -R -q 'android.util.Log\.[vdiew](' work/app/src/main/java
+          ! grep -R -F -q "$(cat /tmp/gp_old_token)" work/app/src/main/java
+          ! grep -q -- '-keep class fun.greenplay.app.\*\* { \*; }' work/app/proguard-rules.pro
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile protected APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Inspect compiled APK for obvious leaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=work/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          rm -f /tmp/gp_apk_strings
+          while read -r dex; do unzip -p "$APK" "$dex"; done < <(unzip -Z1 "$APK" | grep -E '^classes[0-9]*\.dex$') | strings > /tmp/gp_apk_strings
+          ! grep -F -q 'cdmainpainelxy.xyz' /tmp/gp_apk_strings
+          ! grep -F -q "$(cat /tmp/gp_old_token)" /tmp/gp_apk_strings
+          ! grep -F -q 'greenplay-media-proxy' /tmp/gp_apk_strings
+          grep -q 'gpe1:' /tmp/gp_apk_strings
+          rm -f /tmp/gp_old_token /tmp/gp_apk_strings
+
+      - name: Package output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.71_APK_HARDENING_DIRECT-debug.apk
+          cat > out/SECURITY_NOTES_5.28.71.txt <<'TXT'
+          GreenPlay 5.28.71 — base exata 5.28.70
+
+          - Reprodução direta preservada. Nenhum proxy/relay de mídia.
+          - SharedPreferences String cifradas com Android Keystore / AES-GCM.
+          - Catálogo persistente cifrado; snapshots legados em texto são descartados.
+          - R8/minificação ativa no APK distribuído; debuggable=false.
+          - WebView debugging desligado e logs explícitos do app removidos.
+          - Network Security Config endurece somente greenplay.fun.
+          - Cleartext e confiança compatível permanecem para fontes IPTV externas.
+          - Anti-debug/anti-hook conservador. Root por si só não bloqueia TV Box.
+          TXT
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52871_APK_HARDENING_DIRECT.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52871_APK_HARDENING_DIRECT.zip >/dev/null
+          sha256sum out/* > out/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.71-apk-hardening-direct
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
