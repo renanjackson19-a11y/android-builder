@@ -1,0 +1,21 @@
+name: Espaco Multi Transfer
+on:
+  push:
+    branches:
+      - espaco-multi-transfer
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK
+        run: |
+          curl -fL --retry 3 https://greenplay.fun/Espaco_Multi_VirtualApp_NOVO.apk -o Espaco_Multi_NOVO.apk
+          echo "e3f9506ef9e420fce9cdfdb0608711880f109ab51ae570ae08d5286af62dd4ef  Espaco_Multi_NOVO.apk" | sha256sum -c -
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Espaco_Multi_NOVO
+          path: Espaco_Multi_NOVO.apk
+          if-no-files-found: error
+          retention-days: 1
