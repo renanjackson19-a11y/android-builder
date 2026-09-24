@@ -1,0 +1,164 @@
+name: Build GreenPlay 5.28.92 Football Pro UI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52892-football-pro-ui.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.91 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.91-football-channels
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35999777116
+
+      - name: Apply professional football layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52891_FOOTBALL_CHANNELS.zip -d work
+          python3 - <<'PY'
+          from pathlib import Path
+
+          main = Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s = main.read_text(encoding='utf-8')
+
+          new_page = r''' void footballTablePage(){
+            body.setPadding(tvMode?tvContentSide():dp(16),dp(14),tvMode?tvContentSide():dp(16),dp(28));
+            LinearLayout heading=new LinearLayout(this);heading.setOrientation(LinearLayout.VERTICAL);heading.setGravity(Gravity.CENTER_HORIZONTAL);
+            TextView title=t("Jogos",tvMode?30:26);title.setTypeface(null,1);title.setTextColor(Color.WHITE);title.setGravity(Gravity.CENTER);heading.addView(title,new LinearLayout.LayoutParams(-1,dp(40)));
+            TextView sub=t("Futebol ao vivo e próximos jogos",14);sub.setTextColor(0xff95a39b);sub.setGravity(Gravity.CENTER);heading.addView(sub,new LinearLayout.LayoutParams(-1,dp(25)));
+            LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,dp(68));hp.setMargins(0,0,0,dp(4));body.addView(heading,hp);
+
+            HorizontalScrollView datesScroll=new HorizontalScrollView(this);datesScroll.setHorizontalScrollBarEnabled(false);datesScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);datesScroll.setFillViewport(false);
+            LinearLayout dates=new LinearLayout(this);dates.setOrientation(LinearLayout.HORIZONTAL);dates.setGravity(Gravity.CENTER_VERTICAL);dates.setClipToPadding(false);datesScroll.addView(dates,new HorizontalScrollView.LayoutParams(-2,-1));
+            LinearLayout.LayoutParams dlp=new LinearLayout.LayoutParams(-1,dp(66));dlp.setMargins(0,0,0,dp(10));body.addView(datesScroll,dlp);
+            java.util.ArrayList<TextView> chips=new java.util.ArrayList<>();java.util.Calendar base=java.util.Calendar.getInstance();
+            for(int off=-2;off<=2;off++){
+             java.util.Calendar d=(java.util.Calendar)base.clone();d.add(java.util.Calendar.DAY_OF_MONTH,off);
+             TextView chip=t(footballDayLabel(d,off),12);chip.setGravity(Gravity.CENTER);chip.setLines(2);chip.setTypeface(null,1);chip.setTag(footballDayKey(d));
+             final int pos=off+2;GradientDrawable cg=round(off==0?0xff143523:0xff101713,15);cg.setStroke(dp(off==0?2:1),off==0?GREEN:0xff294035);chip.setBackground(cg);chip.setTextColor(off==0?Color.WHITE:0xffc5cfca);
+             LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(tvMode?126:94),dp(52));cp.setMargins(0,0,dp(9),0);dates.addView(chip,cp);chips.add(chip);if(tvMode)armTvFocus(chip);
+             final int selected=pos;chip.setOnClickListener(v->{for(int i=0;i<chips.size();i++){TextView c=chips.get(i);boolean on=i==selected;GradientDrawable g=round(on?0xff143523:0xff101713,15);g.setStroke(dp(on?2:1),on?GREEN:0xff294035);c.setBackground(g);c.setTextColor(on?Color.WHITE:0xffc5cfca);}if(!tvMode)centerFootballDateChip(datesScroll,v,true);loadFootballDate(String.valueOf(v.getTag()));});
+            }
+            if(tvMode)for(int i=0;i+1<chips.size();i++)linkTvHorizontal(chips.get(i),chips.get(i+1));
+            if(chips.size()>2&&!tvMode){datesScroll.post(()->{try{int side=Math.max(0,(datesScroll.getWidth()-chips.get(2).getWidth())/2);dates.setPadding(side,0,side,0);dates.requestLayout();centerFootballDateChip(datesScroll,chips.get(2),false);}catch(Exception ignored){}});}
+
+            LinearLayout section=new LinearLayout(this);section.setGravity(Gravity.CENTER_VERTICAL);section.setPadding(dp(2),0,dp(2),0);
+            TextView sectionTitle=t("PARTIDAS",11);sectionTitle.setTypeface(null,1);sectionTitle.setTextColor(0xff789087);section.addView(sectionTitle,new LinearLayout.LayoutParams(0,dp(28),1));
+            View line=new View(this);line.setBackgroundColor(0xff1c2a23);section.addView(line,new LinearLayout.LayoutParams(dp(72),dp(1)));body.addView(section,new LinearLayout.LayoutParams(-1,dp(34)));
+
+            LinearLayout host=new LinearLayout(this);host.setOrientation(LinearLayout.VERTICAL);host.setTag("football_rows");body.addView(host,new LinearLayout.LayoutParams(-1,-2));renderFootballLoading();
+            if(chips.size()>2){if(tvMode){linkTvVertical(navFootball,chips.get(2));requestTvFocus(chips.get(2));}loadFootballDate(String.valueOf(chips.get(2).getTag()));}
+           }
+          '''
+
+          new_row = r''' View footballGameRow(JSONObject x){
+            JSONObject league=x.optJSONObject("league"),home=x.optJSONObject("home"),away=x.optJSONObject("away");if(league==null)league=new JSONObject();if(home==null)home=new JSONObject();if(away==null)away=new JSONObject();
+            boolean live=x.optBoolean("live",false);String status=x.optString("status","").trim();String time=footballKickoff(x);Object hg=home.opt("goals"),ag=away.opt("goals");String score=(hg!=null&&hg!=JSONObject.NULL&&ag!=null&&ag!=JSONObject.NULL)?String.valueOf(hg)+" x "+String.valueOf(ag):"x";
+            if(status.isEmpty())status=live?"AO VIVO":"Agendado";
+
+            LinearLayout wrap=new LinearLayout(this);wrap.setOrientation(LinearLayout.VERTICAL);wrap.setPadding(dp(14),dp(12),dp(14),dp(13));
+            GradientDrawable bg=round(live?0xff0d1e15:0xff0e1713,18);bg.setStroke(dp(live?2:1),live?GREEN:0xff243a30);wrap.setBackground(bg);
+            LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(-1,-2);wp.setMargins(0,0,0,dp(12));wrap.setLayoutParams(wp);
+
+            LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
+            TextView lg=t(league.optString("name","Futebol"),11);lg.setTypeface(null,1);lg.setSingleLine(true);lg.setEllipsize(android.text.TextUtils.TruncateAt.END);lg.setTextColor(0xff9fb0a7);top.addView(lg,new LinearLayout.LayoutParams(0,dp(30),1));
+            TextView st=t(live?("●  "+status):(time+"   "+status),11);st.setTypeface(null,1);st.setTextColor(live?GREEN:0xffd3ddd8);st.setGravity(Gravity.CENTER);st.setPadding(dp(10),0,dp(10),0);GradientDrawable stBg=round(live?0xff123d28:0xff18231e,11);stBg.setStroke(dp(1),live?0xff2d7650:0xff2a4035);st.setBackground(stBg);top.addView(st,new LinearLayout.LayoutParams(-2,dp(28)));wrap.addView(top,new LinearLayout.LayoutParams(-1,dp(32)));
+
+            LinearLayout teams=new LinearLayout(this);teams.setGravity(Gravity.CENTER_VERTICAL);teams.setPadding(0,dp(3),0,dp(2));
+            ImageView hi=new ImageView(this);hi.setScaleType(ImageView.ScaleType.FIT_CENTER);String hl=home.optString("logo","");if(!hl.isEmpty())Img.loadVisible(hi,hl);teams.addView(hi,new LinearLayout.LayoutParams(dp(42),dp(42)));
+            TextView hn=t(home.optString("name",""),13);hn.setTypeface(null,1);hn.setMaxLines(2);hn.setEllipsize(android.text.TextUtils.TruncateAt.END);hn.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);hn.setPadding(dp(9),0,dp(4),0);teams.addView(hn,new LinearLayout.LayoutParams(0,dp(62),1));
+            TextView sc=t(score,16);sc.setTypeface(null,1);sc.setGravity(Gravity.CENTER);sc.setTextColor(Color.WHITE);teams.addView(sc,new LinearLayout.LayoutParams(dp(54),dp(62)));
+            TextView an=t(away.optString("name",""),13);an.setTypeface(null,1);an.setMaxLines(2);an.setEllipsize(android.text.TextUtils.TruncateAt.END);an.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);an.setPadding(dp(4),0,dp(9),0);teams.addView(an,new LinearLayout.LayoutParams(0,dp(62),1));
+            ImageView ai=new ImageView(this);ai.setScaleType(ImageView.ScaleType.FIT_CENTER);String al=away.optString("logo","");if(!al.isEmpty())Img.loadVisible(ai,al);teams.addView(ai,new LinearLayout.LayoutParams(dp(42),dp(42)));wrap.addView(teams,new LinearLayout.LayoutParams(-1,dp(66)));
+
+            String round=league.optString("round","").trim();if(!round.isEmpty()){TextView r=t(round,10);r.setTextColor(0xff74867d);r.setSingleLine(true);r.setEllipsize(android.text.TextUtils.TruncateAt.END);r.setGravity(Gravity.CENTER);LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(20));rp.setMargins(0,0,0,dp(5));wrap.addView(r,rp);}
+
+            JSONArray broadcastNames=x.optJSONArray("broadcast_names");StringBuilder bt=new StringBuilder();
+            if(broadcastNames!=null)for(int bi=0;bi<broadcastNames.length()&&bi<6;bi++){String bn=broadcastNames.optString(bi,"").trim();if(bn.isEmpty())continue;if(bt.length()>0)bt.append(" • ");bt.append(bn);}
+            if(bt.length()>0){TextView tv=t("📺  Onde assistir\n"+bt,11);tv.setTextColor(0xffc3cec8);tv.setMaxLines(3);tv.setEllipsize(android.text.TextUtils.TruncateAt.END);tv.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);tv.setPadding(dp(11),dp(6),dp(11),dp(6));GradientDrawable ib=round(0xff111c17,12);ib.setStroke(dp(1),0xff263c32);tv.setBackground(ib);LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(-1,dp(bt.length()>55?54:48));ilp.setMargins(0,dp(4),0,dp(7));wrap.addView(tv,ilp);}
+
+            JSONObject linked=x.optJSONObject("watch_channel");String linkedName=linked==null?"":linked.optString("name",linked.optString("stream_name","")).trim();
+            if(!linkedName.isEmpty()){TextView lc=t("✓  GreenPlay  •  "+linkedName,11);lc.setTextColor(0xff8dffb4);lc.setTypeface(null,1);lc.setMaxLines(2);lc.setEllipsize(android.text.TextUtils.TruncateAt.END);lc.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);lc.setPadding(dp(11),dp(5),dp(11),dp(5));GradientDrawable lb=round(0xff0d2b1d,12);lb.setStroke(dp(1),0xff245b3f);lc.setBackground(lb);LinearLayout.LayoutParams llp=new LinearLayout.LayoutParams(-1,dp(42));llp.setMargins(0,0,0,dp(2));wrap.addView(lc,llp);}
+
+            if(live&&x.optBoolean("watch_available",false)){
+             TextView watch=t("▶  Assistir",14);watch.setTypeface(null,1);watch.setTextColor(0xff07150d);watch.setGravity(Gravity.CENTER);watch.setFocusable(tvMode);GradientDrawable wb=round(GREEN,14);watch.setBackground(wb);watch.setContentDescription("Assistir jogo ao vivo");watch.setOnClickListener(v->watchFootballGame(x));if(tvMode)armTvFocus(watch);LinearLayout.LayoutParams wlp=new LinearLayout.LayoutParams(-1,dp(46));wlp.setMargins(0,dp(8),0,0);wrap.addView(watch,wlp);
+            }else if(live){
+             TextView wait=t("● AO VIVO  •  procurando canal no GreenPlay",11);wait.setGravity(Gravity.CENTER);wait.setTextColor(0xffffc875);LinearLayout.LayoutParams wlp=new LinearLayout.LayoutParams(-1,dp(36));wlp.setMargins(0,dp(5),0,0);wrap.addView(wait,wlp);
+            }
+            return wrap;
+           }
+          '''
+
+          a = s.index(' void footballTablePage(){')
+          b = s.index(' void renderFootballLoading()', a)
+          s = s[:a] + new_page + s[b:]
+
+          a = s.index(' View footballGameRow(JSONObject x){')
+          b = s.index('\n int tvCatalogSideWidthPx()', a)
+          s = s[:a] + new_row + s[b:]
+          main.write_text(s, encoding='utf-8')
+
+          gradle = Path('work/app/build.gradle')
+          g = gradle.read_text(encoding='utf-8')
+          g = g.replace('versionCode 52891', 'versionCode 52892')
+          g = g.replace("versionName '5.28.91'", "versionName '5.28.92'")
+          gradle.write_text(g, encoding='utf-8')
+          PY
+
+          grep -q 'versionCode 52892' work/app/build.gradle
+          grep -q "versionName '5.28.92'" work/app/build.gradle
+          grep -q 'PARTIDAS' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'GreenPlay  •' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'TextView watch=t("▶  Assistir"' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.92-FOOTBALL-PRO-UI.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52892_FOOTBALL_PRO_UI.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52892_FOOTBALL_PRO_UI.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.92-football-pro-ui
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
