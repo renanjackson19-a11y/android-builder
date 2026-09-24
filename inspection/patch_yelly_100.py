@@ -193,7 +193,8 @@ manifest.write_text(m,encoding='utf-8')
 # Decode exact approved compact header asset.
 draw=root/'app/src/main/res/drawable-nodpi'
 draw.mkdir(parents=True,exist_ok=True)
-(draw/'yelly_logo.webp').write_bytes(base64.b64decode(Path('inspection/yelly_logo_header_webp.b64').read_text().strip()))
+logo_b64=''.join(Path(f'inspection/yelly_logo_tiny_{i:02d}.b64').read_text().strip() for i in range(5))
+(draw/'yelly_logo.webp').write_bytes(base64.b64decode(logo_b64))
 
 # Simple Yelly launcher icon for first build; header logo is the approved logo.
 icon=root/'app/src/main/res/drawable/yelly_app_icon.xml'
