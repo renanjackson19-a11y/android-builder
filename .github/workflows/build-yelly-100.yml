@@ -1,0 +1,66 @@
+name: Build Yelly Doramas 1.0.0
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-yelly-100.yml'
+      - 'inspection/patch_yelly_100.py'
+      - 'inspection/yelly_logo_tiny_*.b64'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Download base source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.97-tv-keyboard-global
+          path: base_artifact
+          github-token: ${{ github.token }}
+          run-id: 36041618525
+      - name: Create Yelly source
+        shell: bash
+        run: |
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52897_TV_KEYBOARD_GLOBAL.zip -d work
+          python3 inspection/patch_yelly_100.py
+          grep -q "applicationId 'online.yellyplay.doramas'" work/app/build.gradle
+          grep -q "versionName '1.0.0'" work/app/build.gradle
+          test -s work/app/src/main/res/drawable-nodpi/yelly_logo.webp
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile Yelly
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package
+        shell: bash
+        run: |
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/Yelly_Doramas_1.0.0.apk
+          cd work
+          zip -qr ../out/Yelly_Doramas_Android_Nativo_1_0_0.zip . -x '.gradle/*' 'app/build/*' 'build/*'
+          cd ..
+          unzip -t out/Yelly_Doramas_Android_Nativo_1_0_0.zip >/dev/null
+          sha256sum out/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.0
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
