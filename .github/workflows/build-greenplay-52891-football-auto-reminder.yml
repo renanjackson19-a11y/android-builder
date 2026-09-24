@@ -1,0 +1,196 @@
+name: Build GreenPlay 5.28.91 Football Auto Reminder
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52891-football-auto-reminder.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.90 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.90-football-centered
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35950616873
+
+      - name: Apply football auto-channel and reminder
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out apkcheck
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52890_FOOTBALL_CENTERED.zip -d work
+          python3 - <<'PY'
+          from pathlib import Path
+
+          main=Path('work/app/src/main/java/fun/greenplay/app/MainActivity.java')
+          s=main.read_text()
+
+          old='static final int REQ_PROFILE_PHOTO=8601; int mobileBottomInsetPx=0;'
+          new='static final int REQ_PROFILE_PHOTO=8601, REQ_FOOTBALL_NOTIFICATION=8610; String pendingFootballReminderJson=""; int mobileBottomInsetPx=0;'
+          if old not in s: raise SystemExit('REQ marker not found')
+          s=s.replace(old,new,1)
+
+          old=''' void watchFootballGame(JSONObject game){
+            if(game==null||!game.optBoolean("live",false))return;if(blockVpnProtectedContent())return;
+            String search=game.optString("watch_search","").trim();openFootballMappedChannel(search,false);
+           }'''
+          new=''' void watchFootballGame(JSONObject game){
+            if(game==null||!game.optBoolean("live",false))return;if(blockVpnProtectedContent())return;
+            JSONObject direct=game.optJSONObject("watch_channel");
+            if(direct!=null){String u=direct.optString("video_1080",direct.optString("video_720",direct.optString("video_320",""))).trim();if(!u.isEmpty()){openLiveAllowed(direct);return;}}
+            String search=game.optString("watch_search","").trim();openFootballMappedChannel(search,false);
+           }
+           String footballReminderKey(JSONObject game){int id=game==null?0:game.optInt("id",0);if(id!=0)return "football_reminder_"+id;long ts=game==null?0:game.optLong("timestamp",0);JSONObject h=game==null?null:game.optJSONObject("home"),a=game==null?null:game.optJSONObject("away");String hn=h==null?"":h.optString("name",""),an=a==null?"":a.optString("name","");return "football_reminder_"+Math.abs((hn+"|"+an+"|"+ts).hashCode());}
+           int footballReminderRequestCode(JSONObject game){String k=footballReminderKey(game);return 420000+Math.abs(k.hashCode()%200000);}
+           boolean footballReminderActive(JSONObject game){long ts=game==null?0:game.optLong("timestamp",0);return ts>System.currentTimeMillis()/1000L&&sp!=null&&sp.getLong(footballReminderKey(game),0)==ts;}
+           void updateFootballReminderButton(TextView b,JSONObject game){if(b==null)return;boolean on=footballReminderActive(game);b.setText(on?"🔔  LEMBRETE ATIVO":"🔔  LEMBRAR");b.setTextColor(on?0xff07150d:GREEN);GradientDrawable g=round(on?GREEN:0xff0b1711,13);g.setStroke(dp(1),GREEN);b.setBackground(g);}
+           void cancelFootballReminder(JSONObject game,TextView b){try{Intent i=new Intent(this,FootballReminderReceiver.class);i.setAction("fun.greenplay.app.FOOTBALL_REMINDER."+footballReminderRequestCode(game));PendingIntent pi=PendingIntent.getBroadcast(this,footballReminderRequestCode(game),i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);if(am!=null)am.cancel(pi);pi.cancel();}catch(Exception ignored){}if(sp!=null)sp.edit().remove(footballReminderKey(game)).apply();updateFootballReminderButton(b,game);Toast.makeText(this,"Lembrete cancelado.",Toast.LENGTH_SHORT).show();}
+           void scheduleFootballReminderNow(JSONObject game,TextView b){
+            if(game==null)return;long ts=game.optLong("timestamp",0);long kickoff=ts*1000L;long now=System.currentTimeMillis();if(kickoff<=now){Toast.makeText(this,"Esse jogo já começou.",Toast.LENGTH_SHORT).show();return;}
+            JSONObject home=game.optJSONObject("home"),away=game.optJSONObject("away"),league=game.optJSONObject("league");String hn=home==null?"":home.optString("name",""),an=away==null?"":away.optString("name",""),ln=league==null?"Futebol":league.optString("name","Futebol");
+            long fire=kickoff-(10L*60L*1000L);if(fire<now+3000L)fire=Math.min(kickoff,now+3000L);
+            Intent i=new Intent(this,FootballReminderReceiver.class);i.setAction("fun.greenplay.app.FOOTBALL_REMINDER."+footballReminderRequestCode(game));i.putExtra("home",hn);i.putExtra("away",an);i.putExtra("league",ln);i.putExtra("kickoff",kickoff);
+            PendingIntent pi=PendingIntent.getBroadcast(this,footballReminderRequestCode(game),i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);if(am==null){Toast.makeText(this,"Não foi possível criar o lembrete.",Toast.LENGTH_LONG).show();return;}am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,fire,pi);
+            if(sp!=null)sp.edit().putLong(footballReminderKey(game),ts).apply();updateFootballReminderButton(b,game);Toast.makeText(this,"Vou avisar 10 minutos antes do jogo.",Toast.LENGTH_LONG).show();
+           }
+           void toggleFootballReminder(JSONObject game,TextView b){if(footballReminderActive(game)){cancelFootballReminder(game,b);return;}if(android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=android.content.pm.PackageManager.PERMISSION_GRANTED){pendingFootballReminderJson=game==null?"":game.toString();requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},REQ_FOOTBALL_NOTIFICATION);return;}scheduleFootballReminderNow(game,b);}
+           @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==REQ_FOOTBALL_NOTIFICATION){String raw=pendingFootballReminderJson;pendingFootballReminderJson="";if(grantResults!=null&&grantResults.length>0&&grantResults[0]==android.content.pm.PackageManager.PERMISSION_GRANTED&&!raw.isEmpty()){try{JSONObject g=new JSONObject(raw);scheduleFootballReminderNow(g,null);if(activeHomeTab.equals("Futebol"))loadFootballDate(new java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).format(new java.util.Date(g.optLong("timestamp",0)*1000L)));}catch(Exception ignored){}}else Toast.makeText(this,"Ative as notificações do GreenPlay para receber o lembrete.",Toast.LENGTH_LONG).show();}}'''
+          if old not in s: raise SystemExit('football watch marker not found')
+          s=s.replace(old,new,1)
+
+          old='''  String round=league.optString("round","");if(!round.isEmpty()){TextView r=t(round,10);r.setTextColor(0xff718079);r.setSingleLine(true);r.setEllipsize(android.text.TextUtils.TruncateAt.END);wrap.addView(r,new LinearLayout.LayoutParams(-1,dp(20)));}
+            if(live){'''
+          new='''  String round=league.optString("round","");if(!round.isEmpty()){TextView r=t(round,10);r.setTextColor(0xff718079);r.setSingleLine(true);r.setEllipsize(android.text.TextUtils.TruncateAt.END);wrap.addView(r,new LinearLayout.LayoutParams(-1,dp(20)));}
+            JSONArray broadcasts=x.optJSONArray("broadcast_names");if(broadcasts!=null&&broadcasts.length()>0){StringBuilder bt=new StringBuilder("📺  ");for(int bi=0;bi<broadcasts.length();bi++){String bn=broadcasts.optString(bi,"").trim();if(bn.isEmpty())continue;if(bt.length()>4)bt.append("  •  ");bt.append(bn);}if(bt.length()>4){TextView tv=t(bt.toString(),11);tv.setTextColor(0xffa9b8b0);tv.setMaxLines(2);tv.setEllipsize(android.text.TextUtils.TruncateAt.END);tv.setPadding(0,dp(2),0,dp(2));wrap.addView(tv,new LinearLayout.LayoutParams(-1,-2));}}
+            long kickoffTs=x.optLong("timestamp",0);if(!live&&!tvMode&&kickoffTs>System.currentTimeMillis()/1000L){TextView remind=t("🔔  LEMBRAR",12);remind.setTypeface(null,1);remind.setGravity(Gravity.CENTER);remind.setFocusable(false);updateFootballReminderButton(remind,x);remind.setOnClickListener(v->toggleFootballReminder(x,remind));LinearLayout.LayoutParams rlp=new LinearLayout.LayoutParams(-1,dp(40));rlp.setMargins(0,dp(6),0,0);wrap.addView(remind,rlp);}
+            if(live){'''
+          if old not in s: raise SystemExit('football row marker not found')
+          s=s.replace(old,new,1)
+          main.write_text(s)
+
+          manifest=Path('work/app/src/main/AndroidManifest.xml')
+          s=manifest.read_text()
+          old='<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>'
+          if old not in s: raise SystemExit('manifest permission marker not found')
+          s=s.replace(old,old+'<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',1)
+          old='<service android:name=".OfflineDownloadService" android:exported="false" android:foregroundServiceType="dataSync"/>'
+          if old not in s: raise SystemExit('manifest service marker not found')
+          s=s.replace(old,old+'\n  <receiver android:name=".FootballReminderReceiver" android:exported="false"/>',1)
+          manifest.write_text(s)
+
+          receiver=Path('work/app/src/main/java/fun/greenplay/app/FootballReminderReceiver.java')
+          receiver.write_text('''package fun.greenplay.app;
+
+          import android.app.*;
+          import android.content.*;
+          import android.os.Build;
+
+          public class FootballReminderReceiver extends BroadcastReceiver {
+              private static final String CHANNEL_ID="greenplay_football_reminders";
+              @Override public void onReceive(Context context, Intent intent){
+                  String home=intent.getStringExtra("home");
+                  String away=intent.getStringExtra("away");
+                  String league=intent.getStringExtra("league");
+                  if(home==null)home=""; if(away==null)away=""; if(league==null||league.trim().isEmpty())league="Futebol";
+                  NotificationManager nm=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
+                  if(nm==null)return;
+                  if(Build.VERSION.SDK_INT>=26){
+                      NotificationChannel ch=new NotificationChannel(CHANNEL_ID,"Lembretes de jogos",NotificationManager.IMPORTANCE_HIGH);
+                      ch.setDescription("Avisos antes dos jogos marcados no GreenPlay");
+                      nm.createNotificationChannel(ch);
+                  }
+                  Intent open=new Intent(context,MainActivity.class);open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);open.putExtra("gp_restore_nav",0);
+                  PendingIntent content=PendingIntent.getActivity(context,31001,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+                  String title="⚽ O jogo vai começar";
+                  String text=(home+" x "+away).trim(); if(text.equals("x"))text=league;
+                  Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(context,CHANNEL_ID):new Notification.Builder(context);
+                  b.setSmallIcon(R.drawable.greenplay_app_icon).setContentTitle(title).setContentText(text+" • em cerca de 10 minutos").setStyle(new Notification.BigTextStyle().bigText(text+" • "+league+"\\nComeça em cerca de 10 minutos. Abra o GreenPlay para acompanhar.")).setAutoCancel(true).setContentIntent(content).setWhen(System.currentTimeMillis()).setShowWhen(true);
+                  nm.notify(Math.abs((home+"|"+away+"|"+intent.getLongExtra("kickoff",0)).hashCode()),b.build());
+              }
+          }
+          ''')
+
+          gradle=Path('work/app/build.gradle')
+          s=gradle.read_text()
+          s=s.replace('versionCode 52890','versionCode 52891',1).replace("versionName '5.28.90'","versionName '5.28.91'",1)
+          gradle.write_text(s)
+
+          notes=Path('work/app/RELEASE_NOTES.txt')
+          old=notes.read_text()
+          notes.write_text('5.28.91 — Futebol automático: canais de transmissão identificados pela agenda e cruzados automaticamente com o servidor do cliente.\n5.28.91 — Botão Assistir abre diretamente o canal resolvido quando o jogo estiver ao vivo.\n5.28.91 — Lembrete de jogo no celular com notificação cerca de 10 minutos antes.\n5.28.91 — Exibe as emissoras/plataformas de transmissão no card do jogo.\n'+old)
+          PY
+          grep -q 'versionCode 52891' work/app/build.gradle
+          grep -q "versionName '5.28.91'" work/app/build.gradle
+          grep -q 'POST_NOTIFICATIONS' work/app/src/main/AndroidManifest.xml
+          grep -q 'FootballReminderReceiver' work/app/src/main/AndroidManifest.xml
+          grep -q 'LEMBRETE ATIVO' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'watch_channel' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=work/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          mkdir -p apkcheck
+          unzip -q "$APK" 'classes*.dex' -d apkcheck
+          STRINGS=/tmp/allstrings.txt
+          find apkcheck -name 'classes*.dex' -print0 | xargs -0 strings -a > "$STRINGS"
+          grep -q 'LEMBRETE ATIVO' "$STRINGS"
+          grep -q 'Lembretes de jogos' "$STRINGS"
+          if grep -Fq '454946ee403e82a9657eafc76091ccb6d8ccd4a8fadfca45' "$STRINGS"; then
+            echo 'Plain API token leaked into DEX' >&2
+            exit 1
+          fi
+          if grep -Eqi 'greenplay-media-proxy|/media/p/|:8770' "$STRINGS"; then
+            echo 'Relay reference found in APK' >&2
+            exit 1
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.91-FOOTBALL-AUTO-REMINDER.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52891_FOOTBALL_AUTO_REMINDER.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52891_FOOTBALL_AUTO_REMINDER.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.91-football-auto-reminder
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
