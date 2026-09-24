@@ -1,0 +1,78 @@
+name: Build GreenPlay 5.28.95 Football Reminders
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52895-football-reminders.yml'
+      - 'inspection/patch52895_football_reminders.py'
+      - 'inspection/52895/**'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.94 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.94-football-fast-load
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 36019403141
+
+      - name: Apply football reminders
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52894_FOOTBALL_FAST_LOAD.zip -d work
+          python3 inspection/patch52895_football_reminders.py
+          grep -q 'versionCode 52895' work/app/build.gradle
+          grep -q "versionName '5.28.95'" work/app/build.gradle
+          grep -q 'Lembrar-me' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'FootballReminderReceiver' work/app/src/main/AndroidManifest.xml
+          test -s work/app/src/main/java/fun/greenplay/app/FootballReminderManager.java
+          test -s work/app/src/main/java/fun/greenplay/app/FootballReminderReceiver.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.95-FOOTBALL-REMINDERS.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52895_FOOTBALL_REMINDERS.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52895_FOOTBALL_REMINDERS.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.95-football-reminders
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
