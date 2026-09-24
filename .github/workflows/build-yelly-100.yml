@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/build-yelly-100.yml'
       - 'inspection/patch_yelly_100.py'
+      - 'inspection/fix_yelly_100.py'
       - 'inspection/yelly_logo_tiny_*.b64'
 
 permissions:
@@ -40,8 +41,10 @@ jobs:
           mkdir -p work out
           unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52897_TV_KEYBOARD_GLOBAL.zip -d work
           python3 inspection/patch_yelly_100.py
+          python3 inspection/fix_yelly_100.py
           grep -q "applicationId 'online.yellyplay.doramas'" work/app/build.gradle
           grep -q "versionName '1.0.0'" work/app/build.gradle
+          grep -q 'https://yellyplay.online/api/dtlive/' work/app/src/main/java/fun/greenplay/app/SecretStrings.java
           test -s work/app/src/main/res/drawable-nodpi/yelly_logo.webp
       - uses: gradle/actions/setup-gradle@v4
         with:
