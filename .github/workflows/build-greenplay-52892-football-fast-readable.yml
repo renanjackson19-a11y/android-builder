@@ -1,0 +1,94 @@
+name: Build GreenPlay 5.28.92 Football Fast Readable
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-greenplay-52892-football-fast-readable.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download GreenPlay 5.28.91 source
+        uses: actions/download-artifact@v4
+        with:
+          name: GreenPlay-5.28.91-football-auto-channels
+          path: base_artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35966155696
+
+      - name: Apply football readability and cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out apkcheck
+          mkdir -p work out
+          unzip -q base_artifact/GreenPlay_Android_Nativo_5_28_52891_FOOTBALL_AUTO_CHANNELS.zip -d work
+          python3 inspection/patch52892_football_fast_readable.py
+          grep -q 'versionCode 52892' work/app/build.gradle
+          grep -q "versionName '5.28.92'" work/app/build.gradle
+          grep -q 'FOOTBALL_DAY_CACHE_MS' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'NO GREENPLAY' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          grep -q 'watch_server_name' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile APK
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=work/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          mkdir -p apkcheck
+          unzip -q "$APK" 'classes*.dex' -d apkcheck
+          STRINGS=/tmp/allstrings.txt
+          find apkcheck -name 'classes*.dex' -print0 | xargs -0 strings -a > "$STRINGS"
+          if grep -Fq '454946ee403e82a9657eafc76091ccb6d8ccd4a8fadfca45' "$STRINGS"; then
+            echo 'Plain API token leaked into DEX' >&2
+            exit 1
+          fi
+          if grep -Eqi 'greenplay-media-proxy|/media/p/|:8770' "$STRINGS"; then
+            echo 'Relay reference found in APK' >&2
+            exit 1
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/GreenPlay_5.28.92-FOOTBALL-FAST-READABLE.apk
+          (cd work && zip -qr ../out/GreenPlay_Android_Nativo_5_28_52892_FOOTBALL_FAST_READABLE.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/GreenPlay_Android_Nativo_5_28_52892_FOOTBALL_FAST_READABLE.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GreenPlay-5.28.92-football-fast-readable
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
