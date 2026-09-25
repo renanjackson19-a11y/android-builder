@@ -33,7 +33,7 @@ jobs:
           name: Yelly-Doramas-1.0.30
           path: base_artifact
           github-token: ${{ github.token }}
-          run-id: 36135593471
+          run-id: 36137483721
       - name: Remove only marked black Stories bands
         shell: bash
         run: |
