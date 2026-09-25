@@ -2,6 +2,8 @@ from pathlib import Path
 
 root=Path('work')
 main=root/'app/src/main/java/fun/greenplay/app/MainActivity.java'
+stories=root/'app/src/main/java/fun/greenplay/app/StoriesActivity.java'
+yt=root/'app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java'
 grad=root/'app/build.gradle'
 
 s=main.read_text(encoding='utf-8')
@@ -66,6 +68,26 @@ one(
 
 main.write_text(s,encoding='utf-8')
 
+# 7) Stories: também pedir enriquecimento em pt-BR e cobrir a marca do YouTube.
+st=stories.read_text(encoding='utf-8')
+old='Api.post("dorama_enrich",Api.m("title",raw,"display_name",shown,"thumbnail",img,"landscape",land,"series_key",x.optString("series_key",""),"category_name","Yelly Doramas"),new Api.CB(){'
+new='Api.post("dorama_enrich",Api.m("title",raw,"display_name",shown,"thumbnail",img,"landscape",land,"series_key",x.optString("series_key",""),"category_name","Yelly Doramas","language","pt-BR","lang","pt-BR","locale","pt-BR"),new Api.CB(){'
+if st.count(old)!=1: raise SystemExit(f'stories pt-BR expected 1 got {st.count(old)}')
+st=st.replace(old,new,1)
+old='root.addView(web,new FrameLayout.LayoutParams(-1,-1));\n  shade=new View(this);'
+new='root.addView(web,new FrameLayout.LayoutParams(-1,-1));\n  View ytBrandMask=new View(this);ytBrandMask.setBackgroundColor(Color.BLACK);FrameLayout.LayoutParams ybm=new FrameLayout.LayoutParams(dp(136),dp(54),Gravity.RIGHT|Gravity.BOTTOM);ybm.setMargins(0,0,dp(2),dp(2));root.addView(ytBrandMask,ybm);\n  shade=new View(this);'
+if st.count(old)!=1: raise SystemExit(f'stories youtube mask expected 1 got {st.count(old)}')
+st=st.replace(old,new,1)
+stories.write_text(st,encoding='utf-8')
+
+# 8) Player completo: manter os controles Yelly e cobrir a marca do YouTube.
+ys=yt.read_text(encoding='utf-8')
+old='root.addView(web,new FrameLayout.LayoutParams(-1,-1));\n\n        if(!tvMode){'
+new='root.addView(web,new FrameLayout.LayoutParams(-1,-1));\n        View ytBrandMask=new View(this);ytBrandMask.setBackgroundColor(Color.BLACK);FrameLayout.LayoutParams ybm=new FrameLayout.LayoutParams(dp(148),dp(58),Gravity.RIGHT|Gravity.BOTTOM);ybm.setMargins(0,0,dp(2),dp(2));root.addView(ytBrandMask,ybm);\n\n        if(!tvMode){'
+if ys.count(old)!=1: raise SystemExit(f'player youtube mask expected 1 got {ys.count(old)}')
+ys=ys.replace(old,new,1)
+yt.write_text(ys,encoding='utf-8')
+
 g=grad.read_text(encoding='utf-8')
 if "versionCode 10006" not in g or "versionName '1.0.6'" not in g:
     raise SystemExit('expected 1.0.6 corrected base')
@@ -78,6 +100,7 @@ Removido o ícone de play sobre as capas dos Doramas na Home.
 Detalhes: enriquecimento passa a solicitar pt-BR e prioriza description_pt/overview_pt/synopsis_pt/sinopse.
 Sinopse claramente em inglês não é mais exibida como fallback; o app aguarda português ou informa indisponibilidade.
 Elenco: nomes limpos, sem quantidade de filmes/obras anexada ao ator.
+Stories também solicitam pt-BR. A marca visual do YouTube fica coberta nos Stories e no player completo, mantendo os controles próprios do Yelly.
 Mantidos Stories, swipe, catálogo completo, comentários, favoritos, login, identidade do painel e paleta Yelly.
 ''',encoding='utf-8')
 print('YELLY_107_PATCH_OK')
