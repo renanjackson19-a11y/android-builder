@@ -30,18 +30,7 @@ jobs:
           set -euo pipefail
           rm -rf work out && mkdir -p work out
           unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_44.zip -d work
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('work/app/src/main/java/fun/greenplay/app/StoriesActivity.java')
-          s=p.read_text()
-          import re
-          m=re.search(r'yellyLogo\.setImageResource\(R\.drawable\.([A-Za-z0-9_]+)\)',s)
-          if not m: raise SystemExit('Stories logo resource not found')
-          q=Path('work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java')
-          t=q.read_text().replace('R.drawable.yelly_logo_header','R.drawable.'+m.group(1))
-          q.write_text(t)
-          print('Using Stories logo resource:',m.group(1))
-          PY
+          cat inspection/yelly_logo_tiny_00.b64 inspection/yelly_logo_tiny_01.b64 inspection/yelly_logo_tiny_02.b64 inspection/yelly_logo_tiny_03.b64 inspection/yelly_logo_tiny_04.b64 | tr -d '\\n\\r ' | base64 -d > work/app/src/main/res/drawable/yelly_logo_header.webp
           python3 inspection/patch_yelly_145_logo_pink_only.py
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: '8.9', cache-disabled: true}
