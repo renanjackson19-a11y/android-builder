@@ -1,0 +1,47 @@
+name: Build Yelly Doramas 1.0.41
+on:
+  push:
+    paths:
+      - '.github/workflows/build-yelly-141.yml'
+      - 'inspection/patch_yelly_141_player_untouched_floral_masks.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v4
+      - name: Download good 1.0.37 base
+        uses: actions/download-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.37
+          path: base_artifact
+          github-token: ${{ github.token }}
+          run-id: 36160333760
+      - name: Apply only spare-area background
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out && mkdir -p work out
+          unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_37.zip -d work
+          python3 inspection/patch_yelly_141_player_untouched_floral_masks.py
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.9', cache-disabled: true}
+      - name: Compile
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+      - name: Package
+        shell: bash
+        run: |
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/Yelly_Doramas_1.0.41.apk
+          (cd work && zip -qr ../out/Yelly_Doramas_Android_Nativo_1_0_41.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.41
+          path: out/*
+          retention-days: 30
