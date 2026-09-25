@@ -1,0 +1,90 @@
+name: Build Yelly Doramas 1.0.6 Corrected
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-yelly-106-corrected.yml'
+      - 'inspection/patch_yelly_106_corrected.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download clean Yelly 1.0.5 source
+        uses: actions/download-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.5
+          path: base_artifact
+          github-token: ${{ github.token }}
+          run-id: 36079440093
+
+      - name: Apply corrected Yelly 1.0.6 fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_5.zip -d work
+
+          cp work/app/src/main/java/fun/greenplay/app/MainActivity.java /tmp/MainActivity.105.java
+          sha256sum /tmp/MainActivity.105.java
+
+          python3 inspection/patch_yelly_106_corrected.py
+
+          cmp -s /tmp/MainActivity.105.java work/app/src/main/java/fun/greenplay/app/MainActivity.java
+          echo "HOME_105_LAYOUT_PRESERVED"
+
+          grep -q "versionName '1.0.6'" work/app/build.gradle
+          grep -q 'ImageView.ScaleType.FIT_CENTER' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'random","1","seed",feedSeed' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'ACTION_MOVE' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'gpProgress' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'width:100vw;height:100vh' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'totalRows>0?totalRows:items.length()' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'Api.post("add_comment"' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'admin_reply' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'doramaEnrichArgs' work/app/src/main/java/fun/greenplay/app/MainActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile Yelly
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/Yelly_Doramas_1.0.6_Corrigida.apk
+          (cd work && zip -qr ../out/Yelly_Doramas_Android_Nativo_1_0_6_Corrigida.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/Yelly_Doramas_Android_Nativo_1_0_6_Corrigida.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.6-Corrigida
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
