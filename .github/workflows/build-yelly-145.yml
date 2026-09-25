@@ -30,7 +30,7 @@ jobs:
           set -euo pipefail
           rm -rf work out && mkdir -p work out
           unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_44.zip -d work
-          base64 -d inspection/yelly_logo_header_webp.b64 > work/app/src/main/res/drawable/yelly_logo_header.webp
+          tr -cd 'A-Za-z0-9+/=' < inspection/yelly_logo_header_webp.b64 | base64 -d > work/app/src/main/res/drawable/yelly_logo_header.webp
           python3 inspection/patch_yelly_145_logo_pink_only.py
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: '8.9', cache-disabled: true}
