@@ -1,0 +1,75 @@
+name: Build Yelly Doramas 1.0.11
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-yelly-111.yml'
+      - 'inspection/patch_yelly_111_clean_stories_ui.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download Yelly 1.0.10 source
+        uses: actions/download-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.10
+          path: base_artifact
+          github-token: ${{ github.token }}
+          run-id: 36089124882
+
+      - name: Apply Yelly 1.0.11 fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_10.zip -d work
+          python3 inspection/patch_yelly_111_clean_stories_ui.py
+          grep -q "versionName '1.0.11'" work/app/build.gradle
+          grep -q 'ytTopMask' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          grep -q 'ytBottomMask' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile Yelly
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/Yelly_Doramas_1.0.11.apk
+          (cd work && zip -qr ../out/Yelly_Doramas_Android_Nativo_1_0_11.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/Yelly_Doramas_Android_Nativo_1_0_11.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.11
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
