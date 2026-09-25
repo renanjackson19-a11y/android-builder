@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-yelly-115.yml'
-      - 'inspection/StoriesActivity_115.java'
+      - 'inspection/StoriesActivity_115.java.gz.b64'
       - 'inspection/story_banner_bg_114.jpg'
       - 'inspection/patch_yelly_115_native_stories.py'
   workflow_dispatch:
@@ -47,7 +47,7 @@ jobs:
           rm -rf work out
           mkdir -p work out
           unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_14.zip -d work
-          cp inspection/StoriesActivity_115.java work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          base64 -d inspection/StoriesActivity_115.java.gz.b64 | gunzip > work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
           cp inspection/story_banner_bg_114.jpg work/app/src/main/res/drawable-nodpi/story_banner_bg.jpg
           python3 inspection/patch_yelly_115_native_stories.py
           grep -q "versionName '1.0.15'" work/app/build.gradle
