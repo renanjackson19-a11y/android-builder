@@ -6,6 +6,7 @@ on:
       - '.github/workflows/build-yelly-115.yml'
       - 'inspection/StoriesActivity_115.java'
       - 'inspection/story_banner_bg_114.jpg'
+      - 'inspection/patch_yelly_115_native_stories.py'
   workflow_dispatch:
 
 permissions:
@@ -46,58 +47,9 @@ jobs:
           rm -rf work out
           mkdir -p work out
           unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_14.zip -d work
-
           cp inspection/StoriesActivity_115.java work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
           cp inspection/story_banner_bg_114.jpg work/app/src/main/res/drawable-nodpi/story_banner_bg.jpg
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          root=Path("work")
-          stories=root/"app/src/main/java/fun/greenplay/app/StoriesActivity.java"
-          s=stories.read_text(encoding="utf-8")
-          s=s.replace(
-          '''    void fetchCategoryWave(){
-                  if(categories==null||categories.length()==0){loading=false;if(items.length()==0)title.setText("Nenhum conteúdo disponível agora.");return;}
-                  int take=Math.min(8,categories.length());pendingCategoryCalls=take;final int round=fetchRound++;''',
-          '''    void fetchCategoryWave(){
-                  if(categories==null||categories.length()==0){loading=false;if(items.length()==0)title.setText("Nenhum conteúdo disponível agora.");return;}
-                  if(loading && pendingCategoryCalls>0)return;
-                  loading=true;
-                  int take=Math.min(8,categories.length());pendingCategoryCalls=take;final int round=fetchRound++;''')
-          s=s.replace(
-          '''    void categoryDone(){pendingCategoryCalls--;if(pendingCategoryCalls>0)return;loading=false;if(items.length()>0){shuffleArray(items);if(index>=items.length())index=0;if(currentResolved==null)show(index);}else if(fetchRound<3){fetchCategoryWave();}else title.setText("Nenhum conteúdo disponível agora.");}''',
-          '''    void categoryDone(){pendingCategoryCalls--;if(pendingCategoryCalls>0)return;loading=false;if(items.length()>0){if(currentResolved==null){shuffleArray(items);if(index>=items.length())index=0;show(index);}}else if(fetchRound<3){fetchCategoryWave();}else title.setText("Nenhum conteúdo disponível agora.");}''')
-          stories.write_text(s,encoding="utf-8")
-
-          player=root/"app/src/main/java/fun/greenplay/app/PlayerActivity.java"
-          p=player.read_text(encoding="utf-8")
-          old=''' void build(){frame=new FrameLayout(this);frame.setBackgroundColor(Color.BLACK);
-            displayMode=(forcePortrait&&!tvMode)?3:getSharedPreferences("gp",0).getInt("player_display_mode",0);if(displayMode<0||displayMode>3)displayMode=0;playerView=new PlayerView(this);playerView.setUseController(false);playerView.setShutterBackgroundColor(Color.BLACK);FrameLayout.LayoutParams vp=new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER);frame.addView(playerView,vp);'''
-          new=''' void build(){frame=new FrameLayout(this);frame.setBackgroundColor(Color.BLACK);
-            ImageView movieBackdrop=new ImageView(this);movieBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);movieBackdrop.setBackgroundColor(Color.BLACK);String backdropUrl=!movieLandscape.isEmpty()?movieLandscape:moviePoster;if(!backdropUrl.isEmpty())Img.loadVisible(movieBackdrop,backdropUrl);frame.addView(movieBackdrop,new FrameLayout.LayoutParams(-1,-1));View backdropDim=new View(this);backdropDim.setBackgroundColor(0x66000000);frame.addView(backdropDim,new FrameLayout.LayoutParams(-1,-1));
-            displayMode=(forcePortrait&&!tvMode)?3:getSharedPreferences("gp",0).getInt("player_display_mode",0);if(displayMode<0||displayMode>3)displayMode=0;playerView=new PlayerView(this);playerView.setUseController(false);playerView.setShutterBackgroundColor(Color.TRANSPARENT);FrameLayout.LayoutParams vp=new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER);frame.addView(playerView,vp);'''
-          if old not in p:
-              raise SystemExit("PlayerActivity build anchor not found")
-          p=p.replace(old,new,1)
-          player.write_text(p,encoding="utf-8")
-
-          grad=root/"app/build.gradle"
-          g=grad.read_text(encoding="utf-8")
-          if "versionCode 10014" not in g or "versionName '1.0.14'" not in g:
-              raise SystemExit("wrong base version")
-          g=g.replace("versionCode 10014","versionCode 10015",1).replace("versionName '1.0.14'","versionName '1.0.15'",1)
-          grad.write_text(g,encoding="utf-8")
-
-          (root/"app/RELEASE_NOTES.txt").write_text("""Yelly Doramas 1.0.15
-Stories sem YouTube: removido WebView/iframe/Shorts, logo, canal e compartilhar do YouTube.
-Stories agora usam diretamente os vídeos do catálogo Yelly com Media3/ExoPlayer.
-Cada Story é um preview de até 2 minutos e o botão Assistir agora abre o filme completo.
-Banner fixo Yelly no fundo, logo Yelly no topo direito, Favoritar e Comentários mantidos.
-Player completo usa a capa/backdrop do próprio filme como fundo atrás do vídeo.
-""",encoding="utf-8")
-          PY
-
+          python3 inspection/patch_yelly_115_native_stories.py
           grep -q "versionName '1.0.15'" work/app/build.gradle
           grep -q 'ExoPlayer' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
           grep -q 'content_detail' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
@@ -105,10 +57,10 @@ Player completo usa a capa/backdrop do próprio filme como fundo atrás do víde
           grep -q 'PREVIEW_MS=120000L' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
           grep -q 'story_banner_bg' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
           grep -q 'movieBackdrop' work/app/src/main/java/fun/greenplay/app/PlayerActivity.java
-          ! grep -q 'youtube.com' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
-          ! grep -q 'YouTubePlayerActivity' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
-          ! grep -q 'WebView' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
-          ! grep -q 'iframe' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          if grep -q 'youtube.com' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java; then exit 1; fi
+          if grep -q 'YouTubePlayerActivity' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java; then exit 1; fi
+          if grep -q 'WebView' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java; then exit 1; fi
+          if grep -q 'iframe' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java; then exit 1; fi
 
       - uses: gradle/actions/setup-gradle@v4
         with:
