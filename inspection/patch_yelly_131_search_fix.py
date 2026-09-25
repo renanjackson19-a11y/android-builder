@@ -11,8 +11,8 @@ old=''' JSONArray localSearchResults(String q){
  }'''
 new=''' String searchNorm(String v){
   if(v==null)return "";
-  String x=java.text.Normalizer.normalize(v,java.text.Normalizer.Form.NFD).replaceAll("\\\\p{M}+","");
-  x=x.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+"," ").trim().replaceAll("\\\\s+"," ");
+  String x=java.text.Normalizer.normalize(v,java.text.Normalizer.Form.NFD);
+  x=x.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+"," ").trim().replaceAll(" +"," ");
   return x;
  }
  boolean searchMatch(JSONObject x,String needle){
