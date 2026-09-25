@@ -44,11 +44,18 @@ s=one(s,
 '''void animateSwipeViews(float y,long ms,Runnable end){if(web!=null){web.animate().cancel();web.setAlpha(0f);web.setTranslationY(0f);}if(poster!=null)poster.animate().translationY(y).setDuration(ms).start();if(shade!=null)shade.animate().translationY(y).setDuration(ms).start();if(info!=null)info.animate().translationY(y).setDuration(ms).start();if(actions!=null)actions.animate().translationY(y).setDuration(ms).withEndAction(end).start();else if(end!=null)end.run();}''',
 'never animate old youtube webview')
 
-# Remove completamente o contador (5 / 3173) e usa a mesma capa nas faixas superior/inferior.
+# Remove completamente o contador (5 / 3173).
 s=one(s,
-'''void show(int i){if(items.length()==0)return;index=Math.max(0,Math.min(items.length()-1,i));JSONObject x=items.optJSONObject(index);if(x==null)return;final int token=++storyToken;String id=x.optString("youtube_id","").replaceAll("[^A-Za-z0-9_-]","");String nm=cleanTitle(x.optString("name",x.optString("title","Yelly Doramas")));title.setText(nm);meta.setText("Yelly Doramas  •  "+(index+1)+" / "+(totalRows>0?totalRows:items.length()));if(progress!=null)progress.setProgress(0);fav.setText(isFav(x)?"♥\nFavorito":"♡\nFavoritar");String img=x.optString("portrait_img",x.optString("thumbnail",""));if(!img.isEmpty())Img.loadVisible(poster,img);play(id);enrich(x,token);if(more&&index>=items.length()-20)fetch();}''',
-'''void show(int i){if(items.length()==0)return;index=Math.max(0,Math.min(items.length()-1,i));JSONObject x=items.optJSONObject(index);if(x==null)return;final int token=++storyToken;String id=x.optString("youtube_id","").replaceAll("[^A-Za-z0-9_-]","");String nm=cleanTitle(x.optString("name",x.optString("title","Yelly Doramas")));title.setText(nm);meta.setText("Yelly Doramas");if(progress!=null)progress.setProgress(0);fav.setText(isFav(x)?"♥\nFavorito":"♡\nFavoritar");String img=x.optString("portrait_img",x.optString("thumbnail",""));if(web!=null){web.animate().cancel();web.setAlpha(0f);web.setTranslationY(0f);}if(!img.isEmpty()){Img.loadVisible(poster,img);if(topCoverMask!=null)Img.loadVisible(topCoverMask,img);if(bottomCoverMask!=null)Img.loadVisible(bottomCoverMask,img);}play(id);enrich(x,token);if(more&&index>=items.length()-20)fetch();}''',
-'remove count and load story cover background')
+'''meta.setText("Yelly Doramas  •  "+(index+1)+" / "+(totalRows>0?totalRows:items.length()));''',
+'''meta.setText("Yelly Doramas");''',
+'remove story count')
+
+# Usa a mesma capa do filme nas faixas que antes ficavam pretas e esconde
+# o WebView antigo antes de carregar o próximo vídeo.
+s=one(s,
+'''String img=x.optString("portrait_img",x.optString("thumbnail",""));if(!img.isEmpty())Img.loadVisible(poster,img);play(id);''',
+'''String img=x.optString("portrait_img",x.optString("thumbnail",""));if(web!=null){web.animate().cancel();web.setAlpha(0f);web.setTranslationY(0f);}if(!img.isEmpty()){Img.loadVisible(poster,img);if(topCoverMask!=null)Img.loadVisible(topCoverMask,img);if(bottomCoverMask!=null)Img.loadVisible(bottomCoverMask,img);}play(id);''',
+'load story cover backgrounds')
 
 # Só exibe o novo WebView quando o vídeo novo estiver realmente pronto.
 s=one(s,
