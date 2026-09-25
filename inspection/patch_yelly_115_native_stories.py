@@ -1,27 +1,6 @@
 from pathlib import Path
 
 root=Path("work")
-stories=root/"app/src/main/java/fun/greenplay/app/StoriesActivity.java"
-s=stories.read_text(encoding="utf-8")
-
-old="""    void fetchCategoryWave(){
-        if(categories==null||categories.length()==0){loading=false;if(items.length()==0)title.setText("Nenhum conteúdo disponível agora.");return;}
-        int take=Math.min(8,categories.length());pendingCategoryCalls=take;final int round=fetchRound++;"""
-new="""    void fetchCategoryWave(){
-        if(categories==null||categories.length()==0){loading=false;if(items.length()==0)title.setText("Nenhum conteúdo disponível agora.");return;}
-        if(loading && pendingCategoryCalls>0)return;
-        loading=true;
-        int take=Math.min(8,categories.length());pendingCategoryCalls=take;final int round=fetchRound++;"""
-if old not in s:
-    raise SystemExit("fetchCategoryWave anchor not found")
-s=s.replace(old,new,1)
-
-old="""    void categoryDone(){pendingCategoryCalls--;if(pendingCategoryCalls>0)return;loading=false;if(items.length()>0){shuffleArray(items);if(index>=items.length())index=0;if(currentResolved==null)show(index);}else if(fetchRound<3){fetchCategoryWave();}else title.setText("Nenhum conteúdo disponível agora.");}"""
-new="""    void categoryDone(){pendingCategoryCalls--;if(pendingCategoryCalls>0)return;loading=false;if(items.length()>0){if(currentResolved==null){shuffleArray(items);if(index>=items.length())index=0;show(index);}}else if(fetchRound<3){fetchCategoryWave();}else title.setText("Nenhum conteúdo disponível agora.");}"""
-if old not in s:
-    raise SystemExit("categoryDone anchor not found")
-s=s.replace(old,new,1)
-stories.write_text(s,encoding="utf-8")
 
 player=root/"app/src/main/java/fun/greenplay/app/PlayerActivity.java"
 p=player.read_text(encoding="utf-8")
