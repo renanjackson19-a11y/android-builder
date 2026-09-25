@@ -1,0 +1,77 @@
+name: Build Yelly Doramas 1.0.24
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-yelly-124.yml'
+      - 'inspection/patch_yelly_124_exact_greenplay_player.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download Yelly 1.0.23 source
+        uses: actions/download-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.23
+          path: base_artifact
+          github-token: ${{ github.token }}
+          run-id: 36130209337
+
+      - name: Apply exact GreenPlay player framing
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_23.zip -d work
+          python3 inspection/patch_yelly_124_exact_greenplay_player.py
+          grep -q "versionName '1.0.24'" work/app/build.gradle
+          grep -q 'topMaskH' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+          grep -q 'bottomMaskH' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+          grep -q 'transform:scale(1.48)' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+          grep -q 'https://greenplay.fun/' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile Yelly
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/Yelly_Doramas_1.0.24.apk
+          (cd work && zip -qr ../out/Yelly_Doramas_Android_Nativo_1_0_24.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/Yelly_Doramas_Android_Nativo_1_0_24.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.24
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
