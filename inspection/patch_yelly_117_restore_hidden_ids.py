@@ -35,7 +35,7 @@ old_info='''info=new LinearLayout(this);info.setOrientation(LinearLayout.VERTICA
 new_info='''info=new LinearLayout(this);info.setOrientation(LinearLayout.VERTICAL);info.setPadding(dp(18),dp(10),dp(98),dp(10));title=t("Carregando Stories…",19);title.setGravity(Gravity.LEFT);title.setTypeface(null,1);title.setMaxLines(3);title.setEllipsize(android.text.TextUtils.TruncateAt.END);info.addView(title,new LinearLayout.LayoutParams(-1,-2));meta=t("▶  Assistir agora",13);meta.setGravity(Gravity.CENTER);meta.setTypeface(null,1);meta.setTextColor(Color.WHITE);meta.setBackground(round(accent,16));meta.setPadding(dp(14),dp(8),dp(14),dp(8));meta.setOnClickListener(v->openFull());LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(-2,dp(42));mlp.setMargins(0,dp(9),0,0);info.addView(meta,mlp);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(-1,dp(188),Gravity.BOTTOM);ip.setMargins(0,0,0,dp(34));root.addView(info,ip);'''
 s=one(s,old_info,new_info,'story assistir agora')
 new_actions='''actions=new LinearLayout(this);actions.setOrientation(LinearLayout.VERTICAL);actions.setGravity(Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);fav=action("♡\\nFavoritar");fav.setOnClickListener(v->toggleFav());actions.addView(fav,new LinearLayout.LayoutParams(dp(78),dp(74)));comments=action("💬\\nComentários");LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(78),dp(74));cp.setMargins(0,dp(8),0,0);actions.addView(comments,cp);comments.setOnClickListener(v->openComments());FrameLayout.LayoutParams ap=new FrameLayout.LayoutParams(dp(82),dp(176),Gravity.RIGHT|Gravity.BOTTOM);ap.setMargins(0,0,dp(7),dp(126));root.addView(actions,ap);'''
-s,n=re.subn(r'actions=new LinearLayout\(this\);actions\.setOrientation\(LinearLayout\.VERTICAL\);actions\.setGravity\(Gravity\.BOTTOM\|Gravity\.CENTER_HORIZONTAL\);.*?root\.addView\(actions,ap\);',new_actions,s,count=1,flags=re.S)
+s,n=re.subn(r'actions=new LinearLayout\(this\);actions\.setOrientation\(LinearLayout\.VERTICAL\);actions\.setGravity\(Gravity\.BOTTOM\|Gravity\.CENTER_HORIZONTAL\);.*?root\.addView\(actions,ap\);',lambda m:new_actions,s,count=1,flags=re.S)
 if n!=1:
     raise SystemExit(f"story right actions: expected 1 got {n}")
 s=one(s,
@@ -45,7 +45,7 @@ s=one(s,
 # Banner stays fixed while video/UI swipes.
 s=s.replace('if(poster!=null){poster.animate().cancel();poster.setAlpha(0f);poster.setTranslationY(0f);}','',3)
 new_show='''void show(int i){if(items.length()==0)return;index=Math.max(0,Math.min(items.length()-1,i));JSONObject x=items.optJSONObject(index);if(x==null)return;storyReady=false;final int token=++storyToken;String id=x.optString("youtube_id","").replaceAll("[^A-Za-z0-9_-]","");String nm=cleanTitle(x.optString("name",x.optString("title","Yelly Doramas")));title.setText(nm);meta.setText("▶  Assistir agora");if(progress!=null)progress.setProgress(0);fav.setText(isFav(x)?"♥\\nFavorito":"♡\\nFavoritar");if(web!=null){web.animate().cancel();web.setAlpha(0f);web.setTranslationY(0f);}if(poster!=null){poster.setImageResource(R.drawable.story_banner_bg);poster.setAlpha(1f);poster.setTranslationY(0f);}play(id);enrich(x,token);if(more&&index>=items.length()-20)fetch();}'''
-s,n=re.subn(r'void show\(int i\)\{.*?\}(?=\n void play\(String id\))',new_show,s,count=1,flags=re.S)
+s,n=re.subn(r'void show\(int i\)\{.*?\}(?=\n void play\(String id\))',lambda m:new_show,s,count=1,flags=re.S)
 if n!=1:
     raise SystemExit(f"story show: expected 1 got {n}")
 s=one(s,
