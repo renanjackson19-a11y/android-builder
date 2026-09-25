@@ -1,0 +1,80 @@
+name: Build Yelly Doramas 1.0.19
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-yelly-119.yml'
+      - 'inspection/patch_yelly_119_custom_player_test.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Download Yelly 1.0.17 source
+        uses: actions/download-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.17
+          path: base_artifact
+          github-token: ${{ github.token }}
+          run-id: 36103234733
+
+      - name: Apply Yelly 1.0.19 custom player
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work out
+          mkdir -p work out
+          unzip -q base_artifact/Yelly_Doramas_Android_Nativo_1_0_17.zip -d work
+          python3 inspection/patch_yelly_119_custom_player_test.py
+
+          grep -q "versionName '1.0.19'" work/app/build.gradle
+          grep -q 'gpToggle' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+          grep -q '↶ 10s' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+          grep -q 'iframe{position:absolute!important' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java
+          grep -q 'story_banner_bg' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java
+          if grep -q 'ytTopMask' work/app/src/main/java/fun/greenplay/app/StoriesActivity.java; then exit 1; fi
+          if grep -q 'ytBrandMask' work/app/src/main/java/fun/greenplay/app/YouTubePlayerActivity.java; then exit 1; fi
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+
+      - name: Compile Yelly
+        run: cd work && gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/app/build/outputs/apk/debug/app-debug.apk out/Yelly_Doramas_1.0.19.apk
+          (cd work && zip -qr ../out/Yelly_Doramas_Android_Nativo_1_0_19.zip . -x '.gradle/*' 'app/build/*' 'build/*')
+          unzip -t out/Yelly_Doramas_Android_Nativo_1_0_19.zip >/dev/null
+          sha256sum out/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yelly-Doramas-1.0.19
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
