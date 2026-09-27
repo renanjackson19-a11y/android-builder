@@ -17,6 +17,12 @@ for p in list(java_root.rglob("*.java")) + list(res.rglob("*.xml")) + [manifest]
     s=s.replace("greenplay.fun","cinetv.clickaqui.site")
     p.write_text(s,encoding="utf-8")
 
+# Android resource/style identifiers cannot contain spaces.
+for p in list(java_root.rglob("*.java")) + list(res.rglob("*.xml")):
+    s=p.read_text(encoding="utf-8")
+    s=s.replace("CineTV SuperCastDialogTheme","CineTVSuperCastDialogTheme")
+    p.write_text(s,encoding="utf-8")
+
 # Keep app runtime on the franchise API only.
 secret=java_root/"fun/greenplay/app/SecretStrings.java"
 secret.write_text("""package site.clickaqui.cinetv;
