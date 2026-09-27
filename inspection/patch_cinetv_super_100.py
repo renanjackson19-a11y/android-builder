@@ -52,7 +52,7 @@ gradle.write_text(g,encoding="utf-8")
 
 # Manifest resources use CineTV names.
 m=manifest.read_text(encoding="utf-8")
-m=m.replace('android:label="CineTV Super" android:icon="@drawable/greenplay_app_icon" android:roundIcon="@drawable/greenplay_app_icon"',
+m=m.replace('android:label="GreenPlay" android:icon="@drawable/greenplay_app_icon" android:roundIcon="@drawable/greenplay_app_icon"',
             'android:label="CineTV Super" android:icon="@drawable/cinetv_app_icon" android:roundIcon="@drawable/cinetv_app_icon"')
 m=m.replace('android:banner="@drawable/tv_banner"','android:banner="@drawable/cinetv_tv_banner"')
 manifest.write_text(m,encoding="utf-8")
