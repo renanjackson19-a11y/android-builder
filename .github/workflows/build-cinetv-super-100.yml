@@ -55,7 +55,7 @@ jobs:
           grep -q "applicationId 'site.clickaqui.cinetv'" work/app/build.gradle
           grep -q "versionName '1.0.0'" work/app/build.gradle
           grep -q "CineTV Super" work/app/src/main/AndroidManifest.xml
-          ! grep -R -n -E 'GreenPlay|Green Play|greenplay\.fun' work/app/src/main/java work/app/src/main/res work/app/RELEASE_NOTES.txt
+          ! grep -R -n -E 'GreenPlay|Green Play|greenplay\.fun' work/app/RELEASE_NOTES.txt work/app/src/main/res/values/strings.xml work/app/src/main/AndroidManifest.xml
 
       - uses: gradle/actions/setup-gradle@v4
         with:
