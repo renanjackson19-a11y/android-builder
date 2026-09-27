@@ -90,3 +90,5 @@ for p in checks:
     if "GreenPlay" in t or "Green Play" in t or "greenplay.fun" in t:
         raise SystemExit("Old visible branding remains in "+str(p))
 print("CineTV Super 1.0.0 branding/API patch applied")
+
+# rebuild trigger after workflow check fix
