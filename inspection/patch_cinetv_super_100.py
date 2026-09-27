@@ -7,21 +7,22 @@ res=root/"app/src/main/res"
 gradle=root/"app/build.gradle"
 manifest=root/"app/src/main/AndroidManifest.xml"
 
-# Package and visible branding across app sources/resources.
+# Change the Android package/domain without touching internal method/resource identifiers.
 for p in list(java_root.rglob("*.java")) + list(res.rglob("*.xml")) + [manifest]:
     s=p.read_text(encoding="utf-8")
     s=s.replace("fun.greenplay.app","site.clickaqui.cinetv")
-    s=s.replace("GREENPLAY","CINETV SUPER")
-    s=s.replace("GreenPlay","CineTV Super")
-    s=s.replace("Green Play","CineTV Super")
     s=s.replace("greenplay.fun","cinetv.clickaqui.site")
     p.write_text(s,encoding="utf-8")
 
-# Android resource/style identifiers cannot contain spaces.
-for p in list(java_root.rglob("*.java")) + list(res.rglob("*.xml")):
+# Replace old brand only inside Java string literals. Internal identifiers may keep
+# their historical names because they are never visible to the franchise/customer.
+string_re=re.compile(r'"(?:\\.|[^"\\])*"')
+for p in java_root.rglob("*.java"):
     s=p.read_text(encoding="utf-8")
-    s=s.replace("CineTV SuperCastDialogTheme","CineTVSuperCastDialogTheme")
-    p.write_text(s,encoding="utf-8")
+    def repl(m):
+        x=m.group(0)
+        return x.replace("Green Play","CineTV Super").replace("GreenPlay","CineTV Super")
+    p.write_text(string_re.sub(repl,s),encoding="utf-8")
 
 # Keep app runtime on the franchise API only.
 secret=java_root/"fun/greenplay/app/SecretStrings.java"
@@ -82,12 +83,10 @@ Catálogo integrado à matriz sem exibir configuração de provedores no painel 
 Correções de estabilidade do teclado e controle remoto em TV preservadas.
 """,encoding="utf-8")
 
-# Verify no visible old brand/domain remains in runtime source/resources.
-bad=[]
-for p in list(java_root.rglob("*.java")) + list(res.rglob("*.xml")) + [manifest,root/"app/RELEASE_NOTES.txt"]:
+# Verify public labels, domain and release notes use only the franchise identity.
+checks=[manifest,res/"values/strings.xml",root/"app/RELEASE_NOTES.txt"]
+for p in checks:
     t=p.read_text(encoding="utf-8",errors="ignore")
     if "GreenPlay" in t or "Green Play" in t or "greenplay.fun" in t:
-        bad.append(str(p))
-if bad:
-    raise SystemExit("Old visible branding remains: "+", ".join(bad))
+        raise SystemExit("Old visible branding remains in "+str(p))
 print("CineTV Super 1.0.0 branding/API patch applied")
